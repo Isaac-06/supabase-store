@@ -1,4 +1,4 @@
-export default function Cart({ items = [], removeFromCart, updateQuantity }) {
+export default function Cart({ items = [], removeFromCart, updateQuantity, onCheckout }) {
   const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
 
   if (items.length === 0) {
@@ -40,6 +40,9 @@ export default function Cart({ items = [], removeFromCart, updateQuantity }) {
       ))}
 
       <h3>Total: ${total}</h3>
+      <button type="button" className="primary-btn cart-checkout" onClick={onCheckout}>
+        Proceed to checkout
+      </button>
     </div>
   )
 }

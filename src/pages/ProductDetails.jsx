@@ -2,6 +2,10 @@ import { useState } from 'react'
 
 function ProductDetails({ product, onBack, onAddToCart }) {
 	const images = product.images?.length ? product.images : [product.image]
+	const description = product.description ?? ''
+	const taglineIndex = product.name.toLowerCase().includes('headphone')
+		? description.toLowerCase().indexOf('experience crystal clear')
+		: -1
 	const [activeImage, setActiveImage] = useState(images[0])
 
 	return (
@@ -35,14 +39,24 @@ function ProductDetails({ product, onBack, onAddToCart }) {
 					<p className="eyebrow">Product details</p>
 					<h1>{product.name}</h1>
 					<p className="product-detail-price">${product.price}</p>
-					<p className="product-detail-description">{product.description}</p>
+					<p className="product-detail-description">
+						{taglineIndex < 0 ? description : <>
+							{description.slice(0, taglineIndex).trim()}
+							<br />
+							{description.slice(taglineIndex).trim()}
+						</>}
+					</p>
 
 					<div className="product-varieties">
-						<h2>Varieties</h2>
-						<ul>
-							{product.varieties.map((variety) => <li key={variety}>{variety}</li>)}
-						</ul>
-					</div>
+						<h3>Varieties</h3>
+                          <div className="varieties-grid">
+                     {product.varieties.map((variety) => (
+                             <div key={variety} className="variety-item">
+                               {variety}
+                         </div>
+                  ))}
+                  </div>
+				  </div>
 
 					<button type="button" className="primary-btn details-add" onClick={onAddToCart}>
 						Add to Cart

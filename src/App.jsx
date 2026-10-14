@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import Home from './pages/Home'
 import Cart from './pages/Cart'
+import Checkout from './pages/Checkout'
+import OrderConfirmation from './pages/OrderConfirmation'
 import ProductDetails from './pages/ProductDetails'
 import Login from './pages/Login'
 import SignUp from './pages/SignUp'
@@ -16,6 +18,9 @@ function App() {
   const [productsLoading, setProductsLoading] = useState(true)
   const [productsError, setProductsError] = useState('')
   const [user, setUser] = useState(null)
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false)
+  const [checkoutError, setCheckoutError] = useState('')
+  const [completedOrder, setCompletedOrder] = useState(null)
   const [toastMessage, setToastMessage] = useState('')
   const toastTimer = useRef(null)
   const isRecoveringPassword = useRef(false)
@@ -32,7 +37,7 @@ function App() {
       } else {
         setProducts(data.map((product) => ({
           ...product,
-          varieties: Array.isArray(product.varieties) ? product.varieties : [],
+          varieties: Array.isArray(product.varieties) ? product.varieties.flat(): [],
           specifications: product.specifications && typeof product.specifications === 'object' ? product.specifications : {},
         })))
       }
@@ -113,6 +118,56 @@ function App() {
       })
     )
   }
+const placeOrder = async (deliveryDetails) => {
+  if (!user || cartItems.length === 0 || isSubmittingOrder) return
+
+  setCheckoutError('')
+  setIsSubmittingOrder(true)
+
+  const orderItems = cartItems.map((item) => ({
+    product_id: item.id,
+    quantity: item.quantity,
+  }))
+
+  const deliveryAddress = {
+    customer_name: deliveryDetails.customerName.trim(),
+    phone: deliveryDetails.phone.trim(),
+    address_line_1: deliveryDetails.addressLine1.trim(),
+    address_line_2: deliveryDetails.addressLine2.trim(),
+    city: deliveryDetails.city.trim(),
+    postal_code: deliveryDetails.postalCode.trim(),
+    country: deliveryDetails.country.trim(),
+  }
+
+  try {
+    const { data, error } = await supabase.rpc(
+      'create_order',
+      {
+        order_items: orderItems,
+        delivery_address: deliveryAddress,
+      }
+    )
+
+    if (error) throw error
+
+    console.log(data)
+
+    setCompletedOrder(Array.isArray(data) ? data[0] : data)
+
+    setCartItems([])
+
+    setCurrentView('confirmation')
+  } catch (error) {
+    console.error('Could not save order:', error.message)
+
+    setCheckoutError(
+      'Your order could not be saved. Your cart is unchanged; please try again.'
+    )
+  } finally {
+    setIsSubmittingOrder(false)
+  }
+}
+  
 
   const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0)
 
@@ -132,8 +187,11 @@ function App() {
     <div className="app-shell">
       {toastMessage && (
         <div className="toast-success" role="status" aria-live="polite">
-          <strong>Success!</strong>
-          <span>{toastMessage}</span>
+          <span className="toast-success__icon" aria-hidden="true" />
+          <div className="toast-success__content">
+            <strong>Success!</strong>
+            <span>{toastMessage}</span>
+          </div>
         </div>
       )}
 
@@ -269,11 +327,32 @@ function App() {
             items={cartItems}
             removeFromCart={removeFromCart}
             updateQuantity={updateQuantity}
+            onCheckout={() => {
+              setCheckoutError('')
+              setCurrentView('checkout')
+            }}
+          />
+        )}
+        {currentView === 'checkout' && (
+          <Checkout
+            items={cartItems}
+            email={user?.email ?? ''}
+            onBack={() => setCurrentView('cart')}
+            onPlaceOrder={placeOrder}
+            isSubmitting={isSubmittingOrder}
+            error={checkoutError}
+          />
+        )}
+        {currentView === 'confirmation' && completedOrder && (
+          <OrderConfirmation
+            order={completedOrder}
+            onContinueShopping={() => setCurrentView('shop')}
           />
         )}
       </main>
     </div>
-  )
+  );
 }
 
-export default App
+
+export default App;
