@@ -25,7 +25,7 @@ export default function Cart({ items = [], removeFromCart, updateQuantity, onChe
             <button type="button" onClick={() => updateQuantity(item.id, item.quantity + 1)}>
               +
             </button>
-            <button
+            <button 
               type="button"
               onClick={() => {
                 if (window.confirm(`Remove ${item.name} from your cart?`)) {

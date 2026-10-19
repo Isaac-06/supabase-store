@@ -1,20 +1,35 @@
 import { useState } from 'react'
 
+//When product details is opened,display:
+// product information,
+// a function for the Back button
+// a function for the Add to Cart button
 function ProductDetails({ product, onBack, onAddToCart }) {
+	
+	//If the product has multiple images, use them; otherwise, use the single image
 	const images = product.images?.length ? product.images : [product.image]
+
+	//If the product has no description, use an empty string
 	const description = product.description ?? ''
+
+	//If the product is a headphone, find the index of the tagline in the description
 	const taglineIndex = product.name.toLowerCase().includes('headphone')
 		? description.toLowerCase().indexOf('experience crystal clear')
 		: -1
-	const [activeImage, setActiveImage] = useState(images[0])
+	//Set the first image as the active image by default
+		const [activeImage, setActiveImage] = useState(images[0])
 
+		
 	return (
-		<section className="product-details">
+         //Group the product details into a section with a class name of "product-details"
+		 <section className="product-details">
+			
+			//Add a Back button that calls the onBack function when clicked
 			<button type="button" className="details-back" onClick={onBack}>
 				Back to shop
 			</button>
 
-            
+            //Create a layout for the product details with a class name of "product-detail-layout"
 			<div className="product-detail-layout">
 				<div className="product-gallery">
 					<img className="product-detail-image" src={activeImage} alt={product.name} />

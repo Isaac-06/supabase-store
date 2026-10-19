@@ -27,7 +27,7 @@ function OrderConfirmation({ order, onContinueShopping }) {
           <dd>#{order.order_id}</dd>
         </div>
 
-        <div>
+        <div>     
           <dt>Status</dt>
           <dd>Pending</dd>
         </div> 
@@ -43,7 +43,7 @@ function OrderConfirmation({ order, onContinueShopping }) {
         className="primary-btn"
         onClick={onContinueShopping}
       >
-        Continue shopping
+        Continue shopping.
       </button>
     </section>
   )

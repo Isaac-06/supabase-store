@@ -77,6 +77,7 @@ function Checkout({ items = [], email, onBack, onPlaceOrder, isSubmitting, error
                 </div>
                 <span>{formatCurrency(Number(item.price) * item.quantity)}</span>
               </div>
+                
             ))}
           </div>
           <div className="checkout-total">

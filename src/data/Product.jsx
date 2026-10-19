@@ -6,6 +6,10 @@ function Products() {
 
   useEffect(() => {
     async function getProducts() {
+    
+      //.from("products") → use the products table.
+//.select("*") → get every column.
+//await → wait for the database response.
       const { data, error } = await supabase
         .from("products")
         .select("*");

@@ -230,7 +230,8 @@ const placeOrder = async (deliveryDetails) => {
               <button type="button" className="primary-btn" onClick={() => setCurrentView('shop')}>Shop now</button>
               <button type="button" className="secondary-btn" onClick={() => setCurrentView('shop')}>Browse deals</button>
             </div>
-
+               
+               
             <div className="hero-stats">
               <div>
                 <strong>4.9/5</strong>
@@ -246,7 +247,8 @@ const placeOrder = async (deliveryDetails) => {
               </div>
             </div>
           </div>
-
+           
+          
           <div className="hero-visual" aria-label="Featured products">
             <div className="feature-card main-feature">
               <img src={products[0].image} alt={products[0].name} />
