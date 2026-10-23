@@ -32,7 +32,7 @@ create policy "Products are viewable by everyone"
 	on public.products for select using (true);
 ```
 
-To enable the no-payment checkout prototype, also run this in the Supabase SQL editor:
+To enable paid checkout, first create the orders table if it does not already exist:
 
 ```sql
 create table public.orders (
@@ -59,7 +59,31 @@ create policy "Customers can view their own orders"
 	using (auth.uid() = user_id);
 ```
 
-This checkout stores a pending order and does not collect payment. The browser submits the displayed item prices and total, so this is suitable only for a prototype. Before accepting real payments, calculate prices on a trusted server or Supabase Edge Function, and integrate a payment provider there; never treat client-submitted totals as authoritative.
+The migration in `supabase/migrations/20261021000000_paystack_ngn_payments.sql` adds the Paystack reference and NGN amount columns, removes direct customer order insertion, and revokes access to any earlier `create_order` RPC. Apply it to the Supabase project before deploying the Edge Function:
+
+```sh
+supabase link --project-ref your-project-ref
+supabase db push
+```
+
+Deploy the payment function and configure its secrets. Use your Paystack **test** secret key while testing; set the production secret only when you are ready to accept live payments. Never put the Paystack secret key in frontend code or a `VITE_` variable.
+
+```sh
+supabase secrets set PAYSTACK_SECRET_KEY=your-paystack-secret-key APP_ORIGIN=http://localhost:5173
+supabase functions deploy paystack-payments --no-verify-jwt
+```
+
+`APP_ORIGIN` must exactly match the storefront origin, including the scheme and port. Change it to the deployed storefront origin in production. The function is deployed with JWT gateway verification disabled so Paystack can call its webhook; its checkout and verification actions independently require a valid signed-in Supabase user. The function uses the platform-provided `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` secrets.
+
+In the Paystack dashboard, set the webhook URL to:
+
+```text
+https://your-project-ref.supabase.co/functions/v1/paystack-payments
+```
+
+Checkout sends the customer to Paystack in NGN. Product prices are read from Supabase on the server and converted from naira to kobo; the browser never supplies an authoritative amount. On return, the app verifies the transaction with Paystack and checks its reference, status, amount, and currency before marking the order paid. The signed Paystack webhook provides a second confirmation path if the customer does not return to the app.
+
+For local testing, set `APP_ORIGIN` to the local Vite origin, deploy/serve the Edge Function with the required secrets, and use Paystack test credentials. After changing `APP_ORIGIN` or a key, update the Supabase Function secrets before testing again.
 
 Add product rows from **Table Editor > products**. Sign-up and sign-in use Supabase Auth; configure the allowed site URL and email confirmation settings under **Authentication** in the Supabase dashboard.
 

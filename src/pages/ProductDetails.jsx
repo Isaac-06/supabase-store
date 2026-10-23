@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { formatCurrency } from '../utils/currency'
 
 //When product details is opened,display:
 // product information,
@@ -7,7 +8,7 @@ import { useState } from 'react'
 function ProductDetails({ product, onBack, onAddToCart }) {
 	
 	//If the product has multiple images, use them; otherwise, use the single image
-	const images = product.images?.length ? product.images : [product.image]
+	const images = Array.isArray(product.images) && product.images.length ? product.images : [product.image]
 
 	//If the product has no description, use an empty string
 	const description = product.description ?? ''
@@ -24,12 +25,12 @@ function ProductDetails({ product, onBack, onAddToCart }) {
          //Group the product details into a section with a class name of "product-details"
 		 <section className="product-details">
 			
-			//Add a Back button that calls the onBack function when clicked
+		
 			<button type="button" className="details-back" onClick={onBack}>
 				Back to shop
 			</button>
 
-            //Create a layout for the product details with a class name of "product-detail-layout"
+            
 			<div className="product-detail-layout">
 				<div className="product-gallery">
 					<img className="product-detail-image" src={activeImage} alt={product.name} />
@@ -53,7 +54,7 @@ function ProductDetails({ product, onBack, onAddToCart }) {
 				<div className="product-detail-copy">
 					<p className="eyebrow">Product details</p>
 					<h1>{product.name}</h1>
-					<p className="product-detail-price">${product.price}</p>
+					<p className="product-detail-price">{formatCurrency(product.price)}</p>
 					<p className="product-detail-description">
 						{taglineIndex < 0 ? description : <>
 							{description.slice(0, taglineIndex).trim()}
@@ -65,7 +66,7 @@ function ProductDetails({ product, onBack, onAddToCart }) {
 					<div className="product-varieties">
 						<h3>Varieties</h3>
                           <div className="varieties-grid">
-                     {product.varieties.map((variety) => (
+                     {(product.varieties ?? []).map((variety) => (
                              <div key={variety} className="variety-item">
                                {variety}
                          </div>
@@ -82,7 +83,7 @@ function ProductDetails({ product, onBack, onAddToCart }) {
 			<section className="product-specifications">
 				<h2>Specifications</h2>
 				<dl>
-					{Object.entries(product.specifications).map(([label, value]) => (
+					{Object.entries(product.specifications ?? {}).map(([label, value]) => (
 						<div className="specification-row" key={label}>
 							<dt>{label}</dt>
 							<dd>{value}</dd>

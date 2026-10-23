@@ -1,9 +1,4 @@
-function formatCurrency(value) {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(Number(value) || 0)
-}
+import { formatCurrency } from '../utils/currency'
 
 function OrderConfirmation({ order, onContinueShopping }) {
   return (
@@ -18,7 +13,7 @@ function OrderConfirmation({ order, onContinueShopping }) {
       </h1>
 
       <p className="order-confirmation-message">
-        Your order has been saved. Payment has not been collected.
+        Your payment has been confirmed and your order has been placed.
       </p>
 
       <dl className="order-confirmation-details">
@@ -29,7 +24,7 @@ function OrderConfirmation({ order, onContinueShopping }) {
 
         <div>     
           <dt>Status</dt>
-          <dd>Pending</dd>
+          <dd>Paid</dd>
         </div> 
 
         <div>

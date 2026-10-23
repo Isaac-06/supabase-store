@@ -169,6 +169,7 @@ Features: "High-resolution camera, Fast performance, Large display"
     Category: "Power",
     Use: "Power supply for devices",
     Features: "Durable construction, Flexible design, Universal compatibility"
+    
   },
 },
 {

@@ -1,5 +1,11 @@
 import { useState } from 'react'
-import { getAuthRedirectUrl, setRememberSession, supabase } from '../supabase.js'
+import {
+  getAuthRedirectUrl,
+  getSupabaseConfigError,
+  isSupabaseConfigured,
+  setRememberSession,
+  supabase,
+} from '../supabase.js'
 
 function Login({ onAuthenticated, isPasswordRecovery = false, onPasswordUpdated }) {
   const [email, setEmail] = useState('')
@@ -8,27 +14,54 @@ function Login({ onAuthenticated, isPasswordRecovery = false, onPasswordUpdated 
   const [rememberMe, setRememberMe] = useState(false)
   const [isResetRequest, setIsResetRequest] = useState(false)
   const [message, setMessage] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   async function handleSubmit(event) {
     event.preventDefault()
     setMessage('')
+    if (!isSupabaseConfigured) {
+      setMessage(getSupabaseConfigError())
+      return
+    }
+    const trimmedEmail = email.trim()
+    const errors = {}
+
+    if (!trimmedEmail) {
+      errors.email = 'Enter your email address.'
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      errors.email = 'Enter a valid email address, such as name@example.com.'
+    }
+    if (!password) errors.password = 'Enter your password.'
+
+    setFieldErrors(errors)
+    if (Object.keys(errors).length > 0) return
+
     setIsSubmitting(true)
 
-    setRememberSession(rememberMe)
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-    setIsSubmitting(false)
+    try {
+      setRememberSession(rememberMe)
+      const { data, error } = await supabase.auth.signInWithPassword({ email: trimmedEmail, password })
 
-    if (error) {
-      setMessage(error.message)
-    } else {
-      onAuthenticated(data.user)
+      if (error) {
+        setMessage(error.message)
+      } else {
+        onAuthenticated(data.user)
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not sign in. Please try again.')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
   async function handleResetRequest(event) {
     event.preventDefault()
     setMessage('')
+    if (!isSupabaseConfigured) {
+      setMessage(getSupabaseConfigError())
+      return
+    }
     setIsSubmitting(true)
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
@@ -41,6 +74,10 @@ function Login({ onAuthenticated, isPasswordRecovery = false, onPasswordUpdated 
   async function handlePasswordUpdate(event) {
     event.preventDefault()
     setMessage('')
+    if (!isSupabaseConfigured) {
+      setMessage(getSupabaseConfigError())
+      return
+    }
 
     if (password !== confirmPassword) {
       setMessage('Passwords do not match.')
@@ -96,11 +133,13 @@ function Login({ onAuthenticated, isPasswordRecovery = false, onPasswordUpdated 
     <section className="auth-panel">
       <p className="eyebrow">Welcome back</p>
       <h1>Sign in</h1>
-      <form className="auth-form" onSubmit={handleSubmit}>
+      <form className="auth-form" onSubmit={handleSubmit} noValidate>
         <label htmlFor="login-email">Email</label>
-        <input id="login-email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+        <input id="login-email" type="email" autoComplete="email" value={email} onChange={(event) => { setEmail(event.target.value); setFieldErrors((current) => ({ ...current, email: '' })); setMessage('') }} required aria-invalid={Boolean(fieldErrors.email)} aria-describedby={fieldErrors.email ? 'login-email-error' : undefined} />
+        {fieldErrors.email && <span className="auth-field-error" id="login-email-error">{fieldErrors.email}</span>}
         <label htmlFor="login-password">Password</label>
-        <input id="login-password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required />
+        <input id="login-password" type="password" autoComplete="current-password" value={password} onChange={(event) => { setPassword(event.target.value); setFieldErrors((current) => ({ ...current, password: '' })); setMessage('') }} required aria-invalid={Boolean(fieldErrors.password)} aria-describedby={fieldErrors.password ? 'login-password-error' : undefined} />
+        {fieldErrors.password && <span className="auth-field-error" id="login-password-error">{fieldErrors.password}</span>}
         <div className="login-options">
           <label className="remember-option" htmlFor="remember-me">
             <input id="remember-me" type="checkbox" checked={rememberMe} onChange={(event) => setRememberMe(event.target.checked)} />

@@ -3,9 +3,16 @@
 import { createClient } from '@supabase/supabase-js'
 
 //Gets the URL and anon_key from the env file
-//URL = Supabase address,anon-key = pass for user to enter Supabase
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+//URL = Supabase address of backend,anon-key = public key that allows React app talk to Supabase.
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co'
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-anon-key'
+export const isSupabaseConfigured = Boolean(
+  import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY
+)
+
+export function getSupabaseConfigError() {
+  return 'Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env.local before using Supabase features.'
+}
 
 //Serves as a reminder to know if Remember me was used during login
 const rememberSessionKey = 'neoncart-remember-session'
@@ -18,9 +25,11 @@ const authStorage = {
   //Checks whether there is any saved login,
   //Makes use of either localStorage or sessionStorage if there is any
   getItem(key) {
+    if (typeof window === 'undefined') return null
     return window.localStorage.getItem(key) ?? window.sessionStorage.getItem(key)
   },
   setItem(key, value) {
+    if (typeof window === 'undefined') return
     const storage = rememberSession ? window.localStorage : window.sessionStorage
     const otherStorage = rememberSession ? window.sessionStorage : window.localStorage
     
@@ -33,16 +42,15 @@ const authStorage = {
 
   //Deletes the login details completely when logging out
   removeItem(key) {
+    if (typeof window === 'undefined') return
     window.localStorage.removeItem(key)
     window.sessionStorage.removeItem(key)
   },
 }
-//If the Supabase URL or anon_key is not found,the app crashes with a helpful error
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env.local')
-}
+
 //Called when the user ticks or unticks Remember me checkbox 
 export function setRememberSession(shouldRemember) {
+  if (typeof window === 'undefined') return
  
   //Changes the value in memory
   rememberSession = shouldRemember
@@ -52,7 +60,10 @@ export function setRememberSession(shouldRemember) {
 }
 //After email confirmation or password reset, Supabase needs to know where to return the user
 export function getAuthRedirectUrl() {
-  return import.meta.env.VITE_AUTH_REDIRECT_URL || window.location.origin
+  if (typeof window !== 'undefined') {
+    return import.meta.env.VITE_AUTH_REDIRECT_URL || window.location.origin
+  }
+  return import.meta.env.VITE_AUTH_REDIRECT_URL || 'http://localhost:5173'
 }
 
 //Actual connection to Supabase

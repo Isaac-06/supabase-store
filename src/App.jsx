@@ -7,28 +7,92 @@ import OrderConfirmation from './pages/OrderConfirmation'
 import ProductDetails from './pages/ProductDetails'
 import Login from './pages/Login'
 import SignUp from './pages/SignUp'
-import { supabase } from './supabase.js'
+import { getSupabaseConfigError, isSupabaseConfigured, supabase } from './supabase.js'
+
+const savedCartKey = 'neoncart-items'
+
+function getProductCategory(product) {
+  const category = product.specifications?.Category
+  const use = product.specifications?.Use
+  const isGamingProduct = [category, use, product.name].some(
+    (value) => typeof value === 'string' && /\bgaming\b/i.test(value)
+  )
+
+  if (isGamingProduct) return 'Gaming'
+  return typeof category === 'string' ? category.trim() : ''
+}
+
+function getSavedCartItems() {
+  try {
+    const savedItems = window.localStorage.getItem(savedCartKey)
+    const parsedItems = savedItems ? JSON.parse(savedItems) : []
+    return Array.isArray(parsedItems) ? parsedItems : []
+  } catch (error) {
+    console.error('Could not restore cart:', error)
+    return []
+  }
+}
 
 function App() {
-  const [cartItems, setCartItems] = useState([])
+  const [cartItems, setCartItems] = useState(getSavedCartItems)
+  const [paymentReference, setPaymentReference] = useState(() => {
+    const callbackUrl = new URL(window.location.href)
+    if (callbackUrl.searchParams.get('payment') !== 'paystack') return null
+    return callbackUrl.searchParams.get('reference') || callbackUrl.searchParams.get('trxref') || ''
+  })
   const [currentView, setCurrentView] = useState('account')
   const [authMode, setAuthMode] = useState('login')
   const [selectedProduct, setSelectedProduct] = useState(null)
+  const [selectedCategory, setSelectedCategory] = useState(null)
+  const [heroSlide, setHeroSlide] = useState(0)
+  const [isHeroPlaying, setIsHeroPlaying] = useState(
+    () => !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
   const [products, setProducts] = useState([])
   const [productsLoading, setProductsLoading] = useState(true)
   const [productsError, setProductsError] = useState('')
   const [user, setUser] = useState(null)
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false)
+  const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false)
+  const [isSigningOut, setIsSigningOut] = useState(false)
+  const [logoutError, setLogoutError] = useState('')
   const [checkoutError, setCheckoutError] = useState('')
   const [completedOrder, setCompletedOrder] = useState(null)
   const [toastMessage, setToastMessage] = useState('')
   const toastTimer = useRef(null)
+  const logoutDialogRef = useRef(null)
   const isRecoveringPassword = useRef(false)
+
+  useEffect(() => {
+    const dialog = logoutDialogRef.current
+    if (!dialog) return
+
+    if (isLogoutDialogOpen && !dialog.open) {
+      dialog.showModal()
+    } else if (!isLogoutDialogOpen && dialog.open) {
+      dialog.close()
+    }
+  }, [isLogoutDialogOpen])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(savedCartKey, JSON.stringify(cartItems))
+    } catch (error) {
+      console.error('Could not save cart:', error)
+    }
+  }, [cartItems])
 
   useEffect(() => {
     let isMounted = true
 
     async function loadProducts() {
+      if (!isSupabaseConfigured) {
+        if (!isMounted) return
+        setProductsError(getSupabaseConfigError())
+        setProductsLoading(false)
+        return
+      }
+
       const { data, error } = await supabase.from('products').select('*').order('id')
       if (!isMounted) return
 
@@ -37,7 +101,7 @@ function App() {
       } else {
         setProducts(data.map((product) => ({
           ...product,
-          varieties: Array.isArray(product.varieties) ? product.varieties.flat(): [],
+          varieties: Array.isArray(product.varieties) ? product.varieties.flat() : [],
           specifications: product.specifications && typeof product.specifications === 'object' ? product.specifications : {},
         })))
       }
@@ -45,12 +109,20 @@ function App() {
     }
 
     loadProducts()
+    if (!isSupabaseConfigured) return () => {
+      isMounted = false
+    }
     supabase.auth.getSession().then(({ data }) => {
       if (!isMounted) return
 
       const session = data.session
       setUser(session?.user ?? null)
-      if (!isRecoveringPassword.current) setCurrentView(session ? 'home' : 'account')
+      if (
+        !isRecoveringPassword.current
+        && new URLSearchParams(window.location.search).get('payment') !== 'paystack'
+      ) {
+        setCurrentView(session ? 'home' : 'account')
+      }
     })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null)
@@ -124,11 +196,6 @@ const placeOrder = async (deliveryDetails) => {
   setCheckoutError('')
   setIsSubmittingOrder(true)
 
-  const orderItems = cartItems.map((item) => ({
-    product_id: item.id,
-    quantity: item.quantity,
-  }))
-
   const deliveryAddress = {
     customer_name: deliveryDetails.customerName.trim(),
     phone: deliveryDetails.phone.trim(),
@@ -140,29 +207,20 @@ const placeOrder = async (deliveryDetails) => {
   }
 
   try {
-    const { data, error } = await supabase.rpc(
-      'create_order',
-      {
-        order_items: orderItems,
+    const { data, error } = await supabase.functions.invoke('paystack-payments', {
+      body: {
+        action: 'initialize',
+        items: cartItems.map((item) => ({ product_id: item.id, quantity: item.quantity })),
         delivery_address: deliveryAddress,
-      }
-    )
+      },
+    })
 
     if (error) throw error
-
-    console.log(data)
-
-    setCompletedOrder(Array.isArray(data) ? data[0] : data)
-
-    setCartItems([])
-
-    setCurrentView('confirmation')
+    if (!data?.authorization_url) throw new Error('Paystack did not return a payment link.')
+    window.location.assign(data.authorization_url)
   } catch (error) {
-    console.error('Could not save order:', error.message)
-
-    setCheckoutError(
-      'Your order could not be saved. Your cart is unchanged; please try again.'
-    )
+    console.error('Could not start Paystack payment:', error)
+    setCheckoutError(error.message || 'Could not start payment. Please try again.')
   } finally {
     setIsSubmittingOrder(false)
   }
@@ -170,17 +228,104 @@ const placeOrder = async (deliveryDetails) => {
   
 
   const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0)
+  const activeHeroSlide = products.length > 0 ? heroSlide % products.length : 0
+  const activeHeroProduct = products[activeHeroSlide]
+  const categories = [...new Set(
+    products
+      .map(getProductCategory)
+      .filter(Boolean)
+  )].sort((left, right) => left.localeCompare(right))
+  const displayName = typeof user?.user_metadata?.name === 'string'
+    ? user.user_metadata.name.trim()
+    : ''
+
+  useEffect(() => {
+    const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const handleMotionPreferenceChange = (event) => {
+      if (event.matches) setIsHeroPlaying(false)
+    }
+
+    motionPreference.addEventListener('change', handleMotionPreferenceChange)
+    return () => motionPreference.removeEventListener('change', handleMotionPreferenceChange)
+  }, [])
+
+  useEffect(() => {
+    if (currentView !== 'home' || products.length < 2 || !isHeroPlaying) return
+
+    const intervalId = window.setInterval(() => {
+      setHeroSlide((activeHeroSlide + 1) % products.length)
+    }, 8000)
+
+    return () => window.clearInterval(intervalId)
+  }, [activeHeroSlide, currentView, isHeroPlaying, products.length])
+
+  useEffect(() => {
+    if (paymentReference === null || !user) return
+    let isActive = true
+
+    async function verifyPayment() {
+      setCurrentView('payment')
+
+      try {
+        if (!paymentReference) {
+          throw new Error('Paystack did not return a payment reference. Please try again.')
+        }
+        const { data, error } = await supabase.functions.invoke('paystack-payments', {
+          body: { action: 'verify', reference: paymentReference },
+        })
+        if (error) throw error
+        if (!data?.paid) throw new Error(data?.message || 'Payment could not be confirmed.')
+
+        if (isActive) {
+          setCompletedOrder(data.order)
+          setCartItems([])
+          setCurrentView('confirmation')
+        }
+      } catch (error) {
+        console.error('Could not verify Paystack payment:', error)
+        if (isActive) {
+          setCheckoutError(error.message || 'Could not verify payment. Please try again.')
+          setCurrentView('checkout')
+        }
+      } finally {
+        const callbackUrl = new URL(window.location.href)
+        callbackUrl.searchParams.delete('payment')
+        callbackUrl.searchParams.delete('reference')
+        callbackUrl.searchParams.delete('trxref')
+        window.history.replaceState({}, '', callbackUrl)
+        setPaymentReference(null)
+      }
+    }
+
+    void verifyPayment()
+
+    return () => {
+      isActive = false
+    }
+  }, [paymentReference, user])
 
   const handleLogout = async () => {
-    if (!window.confirm('Are you sure you want to sign out?')) return
+    setIsSigningOut(true)
+    setLogoutError('')
 
-    const { error } = await supabase.auth.signOut()
-    if (error) {
-      console.error(error.message)
-      return
+    try {
+      const { error } = await supabase.auth.signOut()
+      if (error) {
+        console.error('Could not sign out:', error.message)
+        setLogoutError(error.message)
+        return
+      }
+
+      setIsLogoutDialogOpen(false)
+      setAuthMode('login')
+      setCurrentView('account')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'An unexpected error occurred.'
+      console.error('Could not sign out:', error)
+      setLogoutError(message)
+    } finally {
+      setIsSigningOut(false)
     }
-    setAuthMode('login')
-    setCurrentView('account')
   }
 
   return (
@@ -203,15 +348,44 @@ const placeOrder = async (deliveryDetails) => {
 
         {user && <nav className="nav">
           <button type="button" onClick={() => setCurrentView('home')}>Home</button>
-          <button type="button" onClick={() => setCurrentView('shop')}>Shop</button>
+          <button type="button" onClick={() => { setSelectedCategory(null); setCurrentView('shop') }}>Shop</button>
           <button type="button" onClick={() => setCurrentView('cart')}>Cart</button>
         </nav>}
 
         <div className="account-actions">
           {user ? (
             <>
-              <button type="button" className="account-button" onClick={handleLogout}>Sign out</button>
-              <button type="button" className="cart-badge" onClick={() => setCurrentView('cart')}>Cart ({totalItems})</button>
+              <div className="welcome-user" aria-label={`Welcome, ${displayName || 'back'}`}>
+                <span className="welcome-user__avatar" aria-hidden="true">
+                  {(displayName || 'U').charAt(0).toUpperCase()}
+                </span>
+                <span className="welcome-user__text">
+                  <span className="welcome-user__label">Welcome</span>
+                  <strong>{displayName || 'back'}</strong>
+                </span>
+              </div>
+              <button
+                type="button"
+                className="account-button"
+                aria-label="Sign out"
+                title="Sign out"
+                onClick={() => {
+                  setLogoutError('')
+                  setIsLogoutDialogOpen(true)
+                }}
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">logout</span>
+              </button>
+              <button
+                type="button"
+                className="cart-badge"
+                aria-label={`Cart, ${totalItems} items`}
+                title="Cart"
+                onClick={() => setCurrentView('cart')}
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">shopping_cart</span>
+                <span className="cart-badge__count">{totalItems}</span>
+              </button>
             </>
           ) : null}
         </div>
@@ -227,8 +401,8 @@ const placeOrder = async (deliveryDetails) => {
             </p>
 
             <div className="hero-actions">
-              <button type="button" className="primary-btn" onClick={() => setCurrentView('shop')}>Shop now</button>
-              <button type="button" className="secondary-btn" onClick={() => setCurrentView('shop')}>Browse deals</button>
+              <button type="button" className="primary-btn" onClick={() => { setSelectedCategory(null); setCurrentView('shop') }}>Shop now</button>
+              <button type="button" className="secondary-btn" onClick={() => { setSelectedCategory(null); setCurrentView('shop') }}>Browse deals</button>
             </div>
                
                
@@ -249,27 +423,147 @@ const placeOrder = async (deliveryDetails) => {
           </div>
            
           
-          <div className="hero-visual" aria-label="Featured products">
-            <div className="feature-card main-feature">
-              <img src={products[0].image} alt={products[0].name} />
-              <div>
+          <div className="hero-visual">
+            <div className="hero-carousel" aria-label="Featured products">
+              <div className="hero-carousel__image-wrap">
+                <img
+                  className="hero-carousel__image"
+                  src={activeHeroProduct.image}
+                  alt={activeHeroProduct.name}
+                  key={activeHeroProduct.id}
+                />
+                <span className="hero-carousel__counter" aria-live="polite">
+                  {activeHeroSlide + 1} / {products.length}
+                </span>
               </div>
+
+              <div className="hero-carousel__footer">
+                <div className="hero-carousel__product">
+                  <span className="hero-carousel__eyebrow">Featured product</span>
+                  <h2>{activeHeroProduct.name}</h2>
+                </div>
+                <button
+                  type="button"
+                  className="hero-carousel__view"
+                  onClick={() => {
+                    setSelectedProduct(activeHeroProduct)
+                    setCurrentView('details')
+                  }}
+                >
+                  View product
+                </button>
+              </div>
+
+              {products.length > 1 && (
+                <div className="hero-carousel__controls" aria-label="Featured product controls">
+                  <button
+                    type="button"
+                    className="hero-carousel__arrow"
+                    aria-label="Previous featured product"
+                    onClick={() => setHeroSlide((current) => (current - 1 + products.length) % products.length)}
+                  >
+                    <span aria-hidden="true">‹</span>
+                  </button>
+                  <div className="hero-carousel__dots" aria-label="Choose a featured product">
+                    {products.map((product, index) => (
+                      <button
+                        key={product.id ?? product.name}
+                        type="button"
+                        className={`hero-carousel__dot${index === activeHeroSlide ? ' is-active' : ''}`}
+                        aria-label={`Show ${product.name}`}
+                        aria-current={index === activeHeroSlide ? 'true' : undefined}
+                        onClick={() => setHeroSlide(index)}
+                      />
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="hero-carousel__autoplay"
+                    aria-label={isHeroPlaying ? 'Pause automatic slide rotation' : 'Resume automatic slide rotation'}
+                    aria-pressed={!isHeroPlaying}
+                    onClick={() => setIsHeroPlaying((playing) => !playing)}
+                  >
+                    {isHeroPlaying ? 'Pause' : 'Play'}
+                  </button>
+                  <button
+                    type="button"
+                    className="hero-carousel__arrow"
+                    aria-label="Next featured product"
+                    onClick={() => setHeroSlide((current) => (current + 1) % products.length)}
+                  >
+                    <span aria-hidden="true">›</span>
+                  </button>
+                </div>
+              )}
             </div>
-
-            {products[1] && <div className="feature-card mini-feature one">
-              <img src={products[1].image} alt={products[1].name} />
-            </div>}
-
-            {products[2] && <div className="feature-card mini-feature two">
-              <img src={products[2].image} alt={products[2].name} />
-            </div>}
           </div>
         </section>}
 
+        {currentView === 'home' && (
+          <section className="categories-section" aria-labelledby="categories-title">
+            <div className="section-header">
+              <div>
+                <h2 id="categories-title">Shop by category</h2>
+                <p>Find the right gear for every part of your setup</p>
+              </div>
+              <button
+                type="button"
+                className="categories-browse-all"
+                onClick={() => {
+                  setSelectedCategory(null)
+                  setCurrentView('shop')
+                }}
+              >
+                Browse all products
+              </button>
+            </div>
+
+            {productsLoading && <p className="product-status" role="status">Loading categories...</p>}
+            {productsError && <p className="product-status error" role="alert">Could not load categories: {productsError}</p>}
+            {!productsLoading && !productsError && categories.length > 0 && (
+              <div className="category-grid">
+                {categories.map((category) => {
+                  const categoryProducts = products.filter((product) => getProductCategory(product) === category)
+                  const categoryImage = categoryProducts.find((product) => product.image)?.image
+
+                  return (
+                    <button
+                      key={category}
+                      type="button"
+                      className="category-card"
+                      onClick={() => {
+                        setSelectedCategory(category)
+                        setCurrentView('shop')
+                      }}
+                    >
+                      {categoryImage && <img src={categoryImage} alt="" />}
+                      <span className="category-card__content">
+                        <strong>{category}</strong>
+                        <span>{categoryProducts.length} {categoryProducts.length === 1 ? 'product' : 'products'}</span>
+                      </span>
+                      <span className="category-card__arrow" aria-hidden="true">→</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+            {!productsLoading && !productsError && products.length === 0 && (
+              <p className="product-status">Categories will appear when products are available.</p>
+            )}
+            {!productsLoading && !productsError && products.length > 0 && categories.length === 0 && (
+              <p className="product-status">No product categories are available yet.</p>
+            )}
+          </section>
+        )}
+
         {currentView === 'shop' && (
           <Home
-            products={products}
+            products={selectedCategory
+              ? products.filter((product) => getProductCategory(product) === selectedCategory)
+              : products}
             addToCart={addToCart}
+            selectedCategory={selectedCategory}
+            onClearCategory={() => setSelectedCategory(null)}
             onViewProduct={(product) => {
               setSelectedProduct(product)
               setCurrentView('details')
@@ -345,6 +639,9 @@ const placeOrder = async (deliveryDetails) => {
             error={checkoutError}
           />
         )}
+        {currentView === 'payment' && (
+          <p className="product-status" role="status">Verifying your Paystack payment...</p>
+        )}
         {currentView === 'confirmation' && completedOrder && (
           <OrderConfirmation
             order={completedOrder}
@@ -352,6 +649,42 @@ const placeOrder = async (deliveryDetails) => {
           />
         )}
       </main>
+
+      <dialog
+        ref={logoutDialogRef}
+        className="logout-dialog"
+        aria-labelledby="logout-dialog-title"
+        aria-describedby="logout-dialog-description"
+        onClose={() => setIsLogoutDialogOpen(false)}
+        onCancel={(event) => {
+          if (isSigningOut) event.preventDefault()
+        }}
+      >
+        <div className="logout-dialog__content">
+          <h2 id="logout-dialog-title">Sign out?</h2>
+          <p id="logout-dialog-description">Are you sure you want to sign out of your account?</p>
+          {logoutError && <p className="logout-dialog__error" role="alert">{logoutError}</p>}
+          <div className="logout-dialog__actions">
+            <button
+              type="button"
+              className="logout-dialog__cancel"
+              onClick={() => setIsLogoutDialogOpen(false)}
+              disabled={isSigningOut}
+              autoFocus
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="logout-dialog__confirm"
+              onClick={handleLogout}
+              disabled={isSigningOut}
+            >
+              {isSigningOut ? 'Signing out...' : 'Sign out'}
+            </button>
+          </div>
+        </div>
+      </dialog>
     </div>
   );
 }

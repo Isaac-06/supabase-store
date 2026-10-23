@@ -1,24 +1,35 @@
 import ProductCard from '../components/ProductCard'
 
-function Home({ products = [], addToCart, onViewProduct }) {
+function Home({ products = [], addToCart, onViewProduct, selectedCategory, onClearCategory }) {
   return (
     <section className="products-section" id="products">
       <div className="section-header">
-        <h2>Popular picks</h2>
-        <p>Curated for modern living</p>
+        <div>
+          <h2>{selectedCategory || 'Popular picks'}</h2>
+          <p>{selectedCategory ? `Products in ${selectedCategory}` : 'Curated for modern living'}</p>
+        </div>
+        {selectedCategory && (
+          <button type="button" className="categories-browse-all" onClick={onClearCategory}>
+            View all products
+          </button>
+        )}
       </div>
 
-      <div className="product-grid">
-        {products.map((product) => (
-          <ProductCard
-            key={product.id}
-            product={product}
-            addToCart={addToCart}
-            onViewProduct={onViewProduct}
-            showMore={product.id === 3}
-          />
-        ))}
-      </div>
+      {products.length > 0 ? (
+        <div className="product-grid">
+          {products.map((product) => (
+            <ProductCard
+              key={product.id}
+              product={product}
+              addToCart={addToCart}
+              onViewProduct={onViewProduct}
+              showMore={product.id === 3}
+            />
+          ))}
+        </div>
+      ) : (
+        <p className="product-status">No products found in this category.</p>
+      )}
     </section>
   )
 }
