@@ -69,8 +69,8 @@ function Checkout({ items = [], email, onBack, onPlaceOrder, isSubmitting, error
 
   return (
     <section className="checkout-page">
-      <button type="button" className="details-back" onClick={onBack}>
-        Back to cart
+      <button type="button" className="back-arrow-button" aria-label="Back to cart" title="Back to cart" onClick={onBack}>
+        <span className="material-symbols-outlined" aria-hidden="true">arrow_back_ios</span>
       </button>
 
       <div className="checkout-layout">

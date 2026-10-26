@@ -36,7 +36,7 @@ function OrderConfirmation({ order, onContinueShopping }) {
       <button
         type="button"
         className="primary-btn"
-        onClick={onContinueShopping}
+        onClick={onContinueShopping}      
       >
         Continue shopping.
       </button>

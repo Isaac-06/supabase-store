@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { formatCurrency } from '../utils/currency'
 
-export default function Cart({ items = [], removeFromCart, updateQuantity, onCheckout }) {
+export default function Cart({ items = [], removeFromCart, updateQuantity, onCheckout, onBack }) {
   const [itemToRemove, setItemToRemove] = useState(null)
   const removeDialogRef = useRef(null)
   const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
@@ -17,44 +17,52 @@ export default function Cart({ items = [], removeFromCart, updateQuantity, onChe
     }
   }, [itemToRemove])
 
-  if (items.length === 0) {
-    return <div>Your cart is empty.</div>
-  }
-
   return (
     <div className="cart">
-      <h2>Your Cart</h2>  
+      <div className="cart-header">
+        <button type="button" className="back-arrow-button" aria-label="Back to shop" title="Back to shop" onClick={onBack}>
+          <span className="material-symbols-outlined" aria-hidden="true">arrow_back_ios</span>
+        </button>
+        <h2>Your Cart</h2>
+      </div>
 
-      {items.map((item) => (
-        <div key={item.id} className="cart-item">
-          <img src={item.image} alt={item.name} width="80" />
-          <div>
-            <h3>{item.name}</h3>
-            <p>{formatCurrency(item.price)}</p>
-          </div>
+      {items.length === 0 ? (
+        <p className="cart-empty">Your cart is empty.</p>
+      ) : (
+        <>
 
-          <div className="cart-controls">
-            <button type="button" onClick={() => updateQuantity(item.id, item.quantity - 1)}>
-              -
-            </button>
-            <span>{item.quantity}</span>
-            <button type="button" onClick={() => updateQuantity(item.id, item.quantity + 1)}>
-              +
-            </button>
-            <button
-              type="button"
-              onClick={() => setItemToRemove(item)}
-            >
-              Remove
-            </button>
-          </div>
-        </div>
-      ))}
+          {items.map((item) => (
+            <div key={item.id} className="cart-item">
+              <img src={item.image} alt={item.name} width="80" />
+              <div>
+                <h3>{item.name}</h3>
+                <p>{formatCurrency(item.price)}</p>
+              </div>
 
-      <h3>Total: {formatCurrency(total)}</h3>
-      <button type="button" className="primary-btn cart-checkout" onClick={onCheckout}>
-        Proceed to checkout
-      </button>
+              <div className="cart-controls">
+                <button type="button" onClick={() => updateQuantity(item.id, item.quantity - 1)}>
+                  -
+                </button>
+                <span>{item.quantity}</span>
+                <button type="button" onClick={() => updateQuantity(item.id, item.quantity + 1)}>
+                  +
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setItemToRemove(item)}
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          ))}
+
+          <h3>Total: {formatCurrency(total)}</h3>
+          <button type="button" className="primary-btn cart-checkout" onClick={onCheckout}>
+            Proceed to checkout
+          </button>
+        </>
+      )}
 
       <dialog
         ref={removeDialogRef}

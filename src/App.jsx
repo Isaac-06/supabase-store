@@ -564,6 +564,7 @@ const placeOrder = async (deliveryDetails) => {
             addToCart={addToCart}
             selectedCategory={selectedCategory}
             onClearCategory={() => setSelectedCategory(null)}
+            onBack={() => setCurrentView('home')}
             onViewProduct={(product) => {
               setSelectedProduct(product)
               setCurrentView('details')
@@ -623,6 +624,7 @@ const placeOrder = async (deliveryDetails) => {
             items={cartItems}
             removeFromCart={removeFromCart}
             updateQuantity={updateQuantity}
+            onBack={() => setCurrentView('shop')}
             onCheckout={() => {
               setCheckoutError('')
               setCurrentView('checkout')
