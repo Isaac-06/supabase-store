@@ -4,7 +4,11 @@ import { formatCurrency } from '../utils/currency'
 export default function Cart({ items = [], removeFromCart, updateQuantity, onCheckout, onBack }) {
   const [itemToRemove, setItemToRemove] = useState(null)
   const removeDialogRef = useRef(null)
-  const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+  const total = items.reduce((sum, item) => {
+    const price = Number(item.price) || 0
+    const quantity = Math.max(0, Number(item.quantity) || 0)
+    return sum + price * quantity
+  }, 0)
 
   useEffect(() => {
     const dialog = removeDialogRef.current
@@ -34,25 +38,31 @@ export default function Cart({ items = [], removeFromCart, updateQuantity, onChe
           {items.map((item) => (
             <div key={item.id} className="cart-item">
               <img src={item.image} alt={item.name} width="80" />
-              <div>
-                <h3>{item.name}</h3>
-                <p>{formatCurrency(item.price)}</p>
-              </div>
-
-              <div className="cart-controls">
-                <button type="button" onClick={() => updateQuantity(item.id, item.quantity - 1)}>
-                  -
-                </button>
-                <span>{item.quantity}</span>
-                <button type="button" onClick={() => updateQuantity(item.id, item.quantity + 1)}>
-                  +
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setItemToRemove(item)}
-                >
-                  Remove
-                </button>
+              <div className="cart-item__details">
+                <div className="cart-item__heading">
+                  <h3>{item.name}</h3>
+                  <div className="cart-controls">
+                    <button type="button" onClick={() => updateQuantity(item.id, item.quantity - 1)}>
+                      -
+                    </button>
+                    <span>{item.quantity}</span>
+                    <button type="button" onClick={() => updateQuantity(item.id, item.quantity + 1)}>
+                      +
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setItemToRemove(item)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+                <p>{formatCurrency(Number(item.price) || 0)}</p>
+                {item.customizationNotes && (
+                  <p className="cart-item__customization">
+                    <strong>Request:</strong> {item.customizationNotes}
+                  </p>
+                )}
               </div>
             </div>
           ))}

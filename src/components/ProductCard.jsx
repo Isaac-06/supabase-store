@@ -15,5 +15,5 @@ function ProductCard({ product, addToCart, onViewProduct }) {
     </div>
   )
 }
-
+ 
 export default ProductCard

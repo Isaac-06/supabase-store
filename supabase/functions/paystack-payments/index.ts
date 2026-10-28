@@ -53,7 +53,11 @@ async function initializePayment(request: Request, body: Record<string, unknown>
 
   const requestedItems = body.items.map((item) => {
     if (!item || typeof item !== 'object') throw new Error('Your cart contains an invalid item.')
-    const { product_id: productId, quantity } = item as Record<string, unknown>
+    const {
+      product_id: productId,
+      quantity,
+      customization_notes: customizationNotes,
+    } = item as Record<string, unknown>
     if (typeof productId !== 'number' || !Number.isSafeInteger(productId) || productId < 1) {
       throw new Error('Your cart contains an invalid product.')
     }
@@ -65,7 +69,17 @@ async function initializePayment(request: Request, body: Record<string, unknown>
     ) {
       throw new Error('Each product quantity must be between 1 and 99.')
     }
-    return { productId, quantity }
+    if (
+      customizationNotes !== undefined
+      && (typeof customizationNotes !== 'string' || customizationNotes.length > 500)
+    ) {
+      throw new Error('A product request must be 500 characters or fewer.')
+    }
+    return {
+      productId,
+      quantity,
+      customizationNotes: typeof customizationNotes === 'string' ? customizationNotes.trim() : '',
+    }
   })
 
   const delivery = body.delivery_address
@@ -95,7 +109,7 @@ async function initializePayment(request: Request, body: Record<string, unknown>
 
   const productsById = new Map(products.map((product) => [Number(product.id), product]))
   let amountKobo = 0
-  const orderItems = requestedItems.map(({ productId, quantity }) => {
+  const orderItems = requestedItems.map(({ productId, quantity, customizationNotes }) => {
     const product = productsById.get(productId)
     const price = Number(product?.price)
     if (!product || !Number.isFinite(price) || price <= 0) {
@@ -112,6 +126,7 @@ async function initializePayment(request: Request, body: Record<string, unknown>
       price,
       quantity,
       image: product.image,
+      ...(customizationNotes ? { customization_notes: customizationNotes } : {}),
     }
   })
   if (!Number.isSafeInteger(amountKobo) || amountKobo < 1) {
@@ -172,7 +187,7 @@ async function verifyPayment(request: Request, body: Record<string, unknown>) {
   const reference = getRequiredText(body.reference, 'payment reference', 100)
   const { data: order, error: orderError } = await admin
     .from('orders')
-    .select('id, user_id, customer_name, total_amount, status, payment_reference, payment_currency, payment_amount_kobo')
+    .select('id, user_id, customer_name, total_amount, status, items, payment_reference, payment_currency, payment_amount_kobo')
     .eq('payment_reference', reference)
     .eq('user_id', user.id)
     .maybeSingle()
@@ -217,6 +232,7 @@ async function verifyPayment(request: Request, body: Record<string, unknown>) {
       customer_name: order.customer_name,
       total_amount: order.total_amount,
       status: 'paid',
+      items: order.items,
     },
   }
 }

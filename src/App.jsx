@@ -11,6 +11,24 @@ import { getSupabaseConfigError, isSupabaseConfigured, supabase } from './supaba
 
 const savedCartKey = 'neoncart-items'
 
+function asNumber(value, fallback = 0) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function normalizeCartItem(item) {
+  if (!item || typeof item !== 'object') return null
+
+  const quantity = Math.max(0, Math.trunc(asNumber(item.quantity, 1)))
+  const price = asNumber(item.price, 0)
+
+  return {
+    ...item,
+    quantity: quantity || 0,
+    price,
+  }
+}
+
 function getProductCategory(product) {
   const category = product.specifications?.Category
   const use = product.specifications?.Use
@@ -26,7 +44,8 @@ function getSavedCartItems() {
   try {
     const savedItems = window.localStorage.getItem(savedCartKey)
     const parsedItems = savedItems ? JSON.parse(savedItems) : []
-    return Array.isArray(parsedItems) ? parsedItems : []
+    if (!Array.isArray(parsedItems)) return []
+    return parsedItems.map(normalizeCartItem).filter(Boolean)
   } catch (error) {
     console.error('Could not restore cart:', error)
     return []
@@ -62,6 +81,7 @@ function App() {
   const toastTimer = useRef(null)
   const logoutDialogRef = useRef(null)
   const isRecoveringPassword = useRef(false)
+  const shouldScrollToAbout = useRef(false)
 
   useEffect(() => {
     const dialog = logoutDialogRef.current
@@ -156,19 +176,26 @@ function App() {
     }, 2200)
   }
 
-  const addToCart = (product) => {
+  const addToCart = (product, customizationNotes = '') => {
     setCartItems((currentItems) => {
+      const normalizedProduct = normalizeCartItem(product)
       const existingItem = currentItems.find((item) => item.id === product.id)
 
       if (existingItem) {
         return currentItems.map((item) =>
           item.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
+            ? {
+                ...normalizeCartItem(item),
+                quantity: Math.max(0, asNumber(item.quantity, 1) + 1),
+                customizationNotes: customizationNotes || item.customizationNotes || '',
+              }
             : item
         )
       }
 
-      return [...currentItems, { ...product, quantity: 1 }]
+      return [...currentItems, normalizedProduct
+        ? { ...normalizedProduct, quantity: 1, customizationNotes }
+        : { ...product, quantity: 1, customizationNotes }]
     })
 
     showToast(`${product.name} added to cart successfully!`)
@@ -185,8 +212,8 @@ function App() {
       currentItems.flatMap((item) => {
         if (item.id !== id) return [item]
 
-        const quantity = Math.max(0, nextQuantity)
-        return quantity === 0 ? [] : [{ ...item, quantity }]
+        const quantity = Math.max(0, Math.trunc(asNumber(nextQuantity, 0)))
+        return quantity === 0 ? [] : [{ ...normalizeCartItem(item), quantity }]
       })
     )
   }
@@ -210,7 +237,11 @@ const placeOrder = async (deliveryDetails) => {
     const { data, error } = await supabase.functions.invoke('paystack-payments', {
       body: {
         action: 'initialize',
-        items: cartItems.map((item) => ({ product_id: item.id, quantity: item.quantity })),
+        items: cartItems.map((item) => ({
+          product_id: item.id,
+          quantity: item.quantity,
+          customization_notes: item.customizationNotes || '',
+        })),
         delivery_address: deliveryAddress,
       },
     })
@@ -227,7 +258,7 @@ const placeOrder = async (deliveryDetails) => {
 }
   
 
-  const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0)
+  const totalItems = cartItems.reduce((sum, item) => sum + Math.max(0, Math.trunc(asNumber(item.quantity, 0))), 0)
   const activeHeroSlide = products.length > 0 ? heroSlide % products.length : 0
   const activeHeroProduct = products[activeHeroSlide]
   const categories = [...new Set(
@@ -254,10 +285,17 @@ const placeOrder = async (deliveryDetails) => {
 
     const intervalId = window.setInterval(() => {
       setHeroSlide((activeHeroSlide + 1) % products.length)
-    }, 8000)
+    }, 5000)
 
     return () => window.clearInterval(intervalId)
   }, [activeHeroSlide, currentView, isHeroPlaying, products.length])
+
+  useEffect(() => {
+    if (currentView !== 'home' || !shouldScrollToAbout.current) return
+
+    document.getElementById('about-us')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    shouldScrollToAbout.current = false
+  }, [currentView])
 
   useEffect(() => {
     if (paymentReference === null || !user) return
@@ -349,7 +387,14 @@ const placeOrder = async (deliveryDetails) => {
         {user && <nav className="nav">
           <button type="button" onClick={() => setCurrentView('home')}>Home</button>
           <button type="button" onClick={() => { setSelectedCategory(null); setCurrentView('shop') }}>Shop</button>
-          <button type="button" onClick={() => setCurrentView('cart')}>Cart</button>
+          <button type="button" onClick={() => {
+            if (currentView === 'home') {
+              document.getElementById('about-us')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              return
+            }
+            shouldScrollToAbout.current = true
+            setCurrentView('home')
+          }}>About Us</button>
         </nav>}
 
         <div className="account-actions">
@@ -503,6 +548,7 @@ const placeOrder = async (deliveryDetails) => {
           <section className="categories-section" aria-labelledby="categories-title">
             <div className="section-header">
               <div>
+                <p className="eyebrow categories-eyebrow">Category</p>
                 <h2 id="categories-title">Shop by category</h2>
                 <p>Find the right gear for every part of your setup</p>
               </div>
@@ -553,6 +599,18 @@ const placeOrder = async (deliveryDetails) => {
             {!productsLoading && !productsError && products.length > 0 && categories.length === 0 && (
               <p className="product-status">No product categories are available yet.</p>
             )}
+          </section>
+        )}
+
+        {currentView === 'home' && (
+          <section className="about-section" id="about-us" aria-labelledby="about-us-title">
+            <p className="eyebrow">About NeonCart</p>
+            <h2 id="about-us-title">Tech for work, play, and everyday life.</h2>
+            <p>
+              We make it easier to find the right gear for your setup by bringing thoughtfully
+              selected products together in one place, so you can spend less time searching and
+              more time enjoying your technology.
+            </p>
           </section>
         )}
 
@@ -613,8 +671,8 @@ const placeOrder = async (deliveryDetails) => {
           <ProductDetails
             product={selectedProduct}
             onBack={() => setCurrentView('shop')}
-            onAddToCart={() => {
-              addToCart(selectedProduct)
+            onAddToCart={(customizationNotes) => {
+              addToCart(selectedProduct, customizationNotes)
               setCurrentView('cart')
             }}
           />

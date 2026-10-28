@@ -33,6 +33,18 @@ function OrderConfirmation({ order, onContinueShopping }) {
         </div>
       </dl>
 
+      {order.items?.some((item) => item.customization_notes) && (
+        <section className="order-confirmation-requests" aria-labelledby="order-requests-title">
+          <h2 id="order-requests-title">Product requests</h2>
+          {order.items.filter((item) => item.customization_notes).map((item) => (
+            <p key={item.product_id}>
+              <strong>{item.name}:</strong> {item.customization_notes}
+            </p>
+          ))}
+          <span>Your requests have been saved with this order and are subject to availability.</span>
+        </section>
+      )}
+
       <button
         type="button"
         className="primary-btn"

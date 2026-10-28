@@ -6,9 +6,29 @@ import { formatCurrency } from '../utils/currency'
 // a function for the Back button
 // a function for the Add to Cart button
 function ProductDetails({ product, onBack, onAddToCart }) {
+	const [customizationNotes, setCustomizationNotes] = useState('')
 	
 	//If the product has multiple images, use them; otherwise, use the single image
 	const images = Array.isArray(product.images) && product.images.length ? product.images : [product.image]
+	const specifications = Object.entries(product.specifications ?? {}).filter(([, value]) => {
+		if (typeof value === 'string') return value.trim().length > 0
+		if (typeof value === 'number') return Number.isFinite(value)
+		return Array.isArray(value) && value.length > 0
+	})
+	const supplementalSpecifications = [
+		['Product', product.name],
+		['Description', product.description],
+		['Available varieties', Array.isArray(product.varieties) ? product.varieties.filter(Boolean).join(', ') : ''],
+		['Price', Number.isFinite(Number(product.price)) ? formatCurrency(product.price) : ''],
+	].filter(([, value]) => typeof value === 'string' && value.trim().length > 0)
+	const specificationLabels = new Set(specifications.map(([label]) => label.toLowerCase()))
+	for (const [label, value] of supplementalSpecifications) {
+		if (specifications.length >= 6) break
+		if (!specificationLabels.has(label.toLowerCase())) {
+			specifications.push([label, value])
+			specificationLabels.add(label.toLowerCase())
+		}
+	}
 
 	//If the product has no description, use an empty string
 	const description = product.description ?? ''
@@ -26,8 +46,8 @@ function ProductDetails({ product, onBack, onAddToCart }) {
 		 <section className="product-details">
 			
 		
-			<button type="button" className="details-back" onClick={onBack}>
-				Back to shop
+			<button type="button" className="back-arrow-button" aria-label="Back to shop" title="Back to shop" onClick={onBack}>
+				<span className="material-symbols-outlined" aria-hidden="true">arrow_back_ios</span>
 			</button>
 
             
@@ -74,24 +94,50 @@ function ProductDetails({ product, onBack, onAddToCart }) {
                   </div>
 				  </div>
 
-					<button type="button" className="primary-btn details-add" onClick={onAddToCart}>
+					<div className="product-customization">
+						<label htmlFor="product-customization-notes">How would you like this product? (optional)</label>
+						<textarea
+							id="product-customization-notes"
+							value={customizationNotes}
+							onChange={(event) => setCustomizationNotes(event.target.value)}
+							maxLength={500}
+							rows={4}
+							placeholder="Describe any preferences or requirements for this product."
+						/>
+						<p>We’ll attach your request to this product in the order. Requests are subject to availability.</p>
+					</div>
+
+					<button type="button" className="primary-btn details-add" onClick={() => onAddToCart(customizationNotes.trim())}>
 						Add to Cart
 					</button>
 				</div>
 			</div>
 
-			<section className="product-specifications">
-				<h2>Specifications</h2>
-				<dl>
-					{Object.entries(product.specifications ?? {}).map(([label, value]) => (
-						<div className="specification-row" key={label}>
-							<dt>{label}</dt>
-							<dd>{value}</dd>
-						</div>
-					))}
-
-
-				</dl>
+			<section className="product-specifications" aria-labelledby="product-specifications-title">
+				<div className="product-specifications__heading">
+					<div>
+						<p className="eyebrow">Product information</p>
+						<h2 id="product-specifications-title">Specifications</h2>
+						<p>Key details to help you choose the right product.</p>
+					</div>
+					{specifications.length > 0 && (
+						<span className="product-specifications__count">
+							{specifications.length} {specifications.length === 1 ? 'detail' : 'details'}
+						</span>
+					)}
+				</div>
+				{specifications.length > 0 ? (
+					<div className="product-specifications__grid">
+						{specifications.map(([label, value]) => (
+							<details className="specification-row" key={label}>
+								<summary>{label.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ')}</summary>
+								<p>{Array.isArray(value) ? value.join(', ') : value}</p>
+							</details>
+						))}
+					</div>
+				) : (
+					<p className="product-specifications__empty">Specifications are not available for this product yet.</p>
+				)}
 			</section>
 		</section>
 	)
