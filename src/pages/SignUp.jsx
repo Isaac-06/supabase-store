@@ -5,6 +5,7 @@ import {
   isSupabaseConfigured,
   supabase,
 } from '../supabase.js'
+import PasswordStrength from '../components/PasswordStrength.jsx'
 
 function SignUp({ onAuthenticated }) {
   const [name, setName] = useState('')
@@ -12,7 +13,7 @@ function SignUp({ onAuthenticated }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useState('')  
   const [messageRole, setMessageRole] = useState('alert')
   const [fieldErrors, setFieldErrors] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -107,8 +108,9 @@ function SignUp({ onAuthenticated }) {
         <input id="signup-email" type="email" autoComplete="email" value={email} onChange={(event) => { setEmail(event.target.value); setFieldErrors((current) => ({ ...current, email: '' })); setMessage('') }} required aria-invalid={Boolean(fieldErrors.email)} aria-describedby={fieldErrors.email ? 'signup-email-error' : undefined} />
         {fieldErrors.email && <span className="auth-field-error" id="signup-email-error">{fieldErrors.email}</span>}
         <label htmlFor="signup-password">Password</label>
-        <input id="signup-password" type="password" autoComplete="new-password" minLength={6} value={password} onChange={(event) => { setPassword(event.target.value); setFieldErrors((current) => ({ ...current, password: '', confirmPassword: '' })); setMessage('') }} required aria-invalid={Boolean(fieldErrors.password)} aria-describedby={fieldErrors.password ? 'signup-password-error' : undefined} />
+        <input id="signup-password" type="password" autoComplete="new-password" minLength={6} value={password} onChange={(event) => { setPassword(event.target.value); setFieldErrors((current) => ({ ...current, password: '', confirmPassword: '' })); setMessage('') }} required aria-invalid={Boolean(fieldErrors.password)} aria-describedby={fieldErrors.password ? 'signup-password-error signup-password-guidance' : 'signup-password-guidance'} />
         {fieldErrors.password && <span className="auth-field-error" id="signup-password-error">{fieldErrors.password}</span>}
+        <PasswordStrength password={password} id="signup-password" />
         <label htmlFor="signup-confirm-password">Confirm password</label>
         <input id="signup-confirm-password" type="password" autoComplete="new-password" minLength={6} value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setFieldErrors((current) => ({ ...current, confirmPassword: '' })); setMessage('') }} required aria-invalid={Boolean(fieldErrors.confirmPassword)} aria-describedby={fieldErrors.confirmPassword ? 'signup-confirm-password-error' : undefined} />
         {fieldErrors.confirmPassword && <span className="auth-field-error" id="signup-confirm-password-error">{fieldErrors.confirmPassword}</span>}

@@ -6,6 +6,7 @@ import {
   setRememberSession,
   supabase,
 } from '../supabase.js'
+import PasswordStrength from '../components/PasswordStrength.jsx'
 
 function Login({ onAuthenticated, isPasswordRecovery = false, onPasswordUpdated }) {
   const [email, setEmail] = useState('')
@@ -44,10 +45,11 @@ function Login({ onAuthenticated, isPasswordRecovery = false, onPasswordUpdated 
       const { data, error } = await supabase.auth.signInWithPassword({ email: trimmedEmail, password })
 
       if (error) {
-        setMessage(error.message)
-      } else {
-        onAuthenticated(data.user)
-      }
+  console.error("Login error:", error)
+  setMessage(error.message)
+} else {
+  onAuthenticated(data.user)
+}
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not sign in. Please try again.')
     } finally {
@@ -79,6 +81,10 @@ function Login({ onAuthenticated, isPasswordRecovery = false, onPasswordUpdated 
       return
     }
 
+    if (password.length < 6) {
+      setMessage('Your password must be at least 6 characters.')
+      return
+    }
     if (password !== confirmPassword) {
       setMessage('Passwords do not match.')
       return
@@ -103,7 +109,8 @@ function Login({ onAuthenticated, isPasswordRecovery = false, onPasswordUpdated 
         <h1>Choose a new password</h1>
         <form className="auth-form" onSubmit={handlePasswordUpdate}>
           <label htmlFor="new-password">New password</label>
-          <input id="new-password" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={6} required />
+          <input id="new-password" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={6} required aria-describedby="new-password-guidance" />
+          <PasswordStrength password={password} id="new-password" />
           <label htmlFor="confirm-password">Confirm password</label>
           <input id="confirm-password" type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} minLength={6} required />
           <button className="primary-btn" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Updating...' : 'Update password'}</button>

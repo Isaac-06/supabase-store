@@ -7,6 +7,7 @@ import OrderConfirmation from './pages/OrderConfirmation'
 import ProductDetails from './pages/ProductDetails'
 import Login from './pages/Login'
 import SignUp from './pages/SignUp'
+import ProductCard from './components/ProductCard'
 import { getSupabaseConfigError, isSupabaseConfigured, supabase } from './supabase.js'
 
 const savedCartKey = 'neoncart-items'
@@ -28,6 +29,8 @@ function normalizeCartItem(item) {
     price,
   }
 }
+
+
 
 function getProductCategory(product) {
   const category = product.specifications?.Category
@@ -291,10 +294,13 @@ const placeOrder = async (deliveryDetails) => {
   }, [activeHeroSlide, currentView, isHeroPlaying, products.length])
 
   useEffect(() => {
-    if (currentView !== 'home' || !shouldScrollToAbout.current) return
+    if (currentView === 'home' && shouldScrollToAbout.current) {
+      document.getElementById('about-us')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      shouldScrollToAbout.current = false
+      return
+    }
 
-    document.getElementById('about-us')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    shouldScrollToAbout.current = false
+    window.scrollTo(0, 0)
   }, [currentView])
 
   useEffect(() => {
@@ -447,22 +453,28 @@ const placeOrder = async (deliveryDetails) => {
 
             <div className="hero-actions">
               <button type="button" className="primary-btn" onClick={() => { setSelectedCategory(null); setCurrentView('shop') }}>Shop now</button>
-              <button type="button" className="secondary-btn" onClick={() => { setSelectedCategory(null); setCurrentView('shop') }}>Browse deals</button>
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => document.getElementById('shop-categories')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              >
+                Explore categories
+              </button>
             </div>
                
                
             <div className="hero-stats">
               <div>
-                <strong>4.9/5</strong>
-                <span>Customer rating</span>
+                <strong>{products.length}</strong>
+                <span>Products to explore</span>
               </div>
               <div>
-                <strong>2k+</strong>
-                <span>Products sold</span>
+                <strong>{categories.length}</strong>
+                <span>Shop categories</span>
               </div>
-              <div>
-                <strong>24h</strong>
-                <span>Fast shipping</span>
+              <div className="hero-stats__payment" aria-label="Payment partner: Paystack">
+                <span className="hero-stats__payment-label">Payment partner</span>
+                <img className="hero-stats__logo" src="/paystack.png" alt="Paystack" />
               </div>
             </div>
           </div>
@@ -545,7 +557,7 @@ const placeOrder = async (deliveryDetails) => {
         </section>}
 
         {currentView === 'home' && (
-          <section className="categories-section" aria-labelledby="categories-title">
+          <section className="categories-section" id="shop-categories" aria-labelledby="categories-title">
             <div className="section-header">
               <div>
                 <p className="eyebrow categories-eyebrow">Category</p>
@@ -599,6 +611,40 @@ const placeOrder = async (deliveryDetails) => {
             {!productsLoading && !productsError && products.length > 0 && categories.length === 0 && (
               <p className="product-status">No product categories are available yet.</p>
             )}
+          </section>
+        )}
+
+        {currentView === 'home' && products.length > 0 && (
+          <section className="home-featured-section" aria-labelledby="home-featured-title">
+            <div className="section-header">
+              <div>
+                <h2 id="home-featured-title">Explore products</h2>
+                <p>A few products to get you started</p>
+              </div>
+              <button
+                type="button"
+                className="categories-browse-all"
+                onClick={() => {
+                  setSelectedCategory(null)
+                  setCurrentView('shop')
+                }}
+              >
+                View all products
+              </button>
+            </div>
+            <div className="product-grid">
+              {products.slice(0, 4).map((product) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  addToCart={addToCart}
+                  onViewProduct={(selected) => {
+                    setSelectedProduct(selected)
+                    setCurrentView('details')
+                  }}
+                />
+              ))}
+            </div>
           </section>
         )}
 
