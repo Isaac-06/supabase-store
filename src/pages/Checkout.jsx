@@ -29,12 +29,10 @@ function Checkout({ items = [], email, onBack, onPlaceOrder, isSubmitting, error
     const orderDetails = Object.fromEntries(formData.entries())
     const errors = {}
     const requiredFields = {
-      customerName: 'Enter your full name.',
       phone: 'Enter your phone number.',
       addressLine1: 'Enter your address.',
       city: 'Enter your city.',
       postalCode: 'Enter your postal code.',
-      country: 'Enter your country or region.',
     }
 
     Object.entries(requiredFields).forEach(([field, message]) => {
@@ -84,20 +82,6 @@ function Checkout({ items = [], email, onBack, onPlaceOrder, isSubmitting, error
           <p className="checkout-account">Signed in as <strong>{email}</strong></p>
 
           <div className="checkout-fields">
-            <label>
-              Full name
-              <input
-                name="customerName"
-                type="text"
-                autoComplete="name"
-                maxLength="120"
-                required
-                aria-invalid={Boolean(fieldErrors.customerName)}
-                aria-describedby={fieldErrors.customerName ? 'checkout-customer-name-error' : undefined}
-                onChange={() => clearFieldError('customerName')}
-              />
-              {fieldErrors.customerName && <span className="checkout-field-error" id="checkout-customer-name-error">{fieldErrors.customerName}</span>}
-            </label>
             <label>
               Phone number
               <input
@@ -157,20 +141,6 @@ function Checkout({ items = [], email, onBack, onPlaceOrder, isSubmitting, error
                 onChange={() => clearFieldError('postalCode')}
               />
               {fieldErrors.postalCode && <span className="checkout-field-error" id="checkout-postal-code-error">{fieldErrors.postalCode}</span>}
-            </label>
-            <label className="checkout-field-full">
-              Country or region
-              <input
-                name="country"
-                type="text"
-                autoComplete="country-name"
-                maxLength="100"
-                required
-                aria-invalid={Boolean(fieldErrors.country)}
-                aria-describedby={fieldErrors.country ? 'checkout-country-error' : undefined}
-                onChange={() => clearFieldError('country')}
-              />
-              {fieldErrors.country && <span className="checkout-field-error" id="checkout-country-error">{fieldErrors.country}</span>}
             </label>
           </div>
 

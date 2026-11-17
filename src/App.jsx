@@ -4,6 +4,7 @@ import Home from './pages/Home'
 import Cart from './pages/Cart'
 import Checkout from './pages/Checkout'
 import OrderConfirmation from './pages/OrderConfirmation'
+import Orders from './pages/Orders'
 import ProductDetails from './pages/ProductDetails'
 import Login from './pages/Login'
 import SignUp from './pages/SignUp'
@@ -32,6 +33,7 @@ function normalizeCartItem(item) {
 
 
 
+
 function getProductCategory(product) {
   const category = product.specifications?.Category
   const use = product.specifications?.Use
@@ -43,12 +45,14 @@ function getProductCategory(product) {
   return typeof category === 'string' ? category.trim() : ''
 }
 
-function getSavedCartItems() {
+function getSavedCartItems(userId) {
+  if (!userId) return []
+
   try {
     const savedItems = window.localStorage.getItem(savedCartKey)
-    const parsedItems = savedItems ? JSON.parse(savedItems) : []
-    if (!Array.isArray(parsedItems)) return []
-    return parsedItems.map(normalizeCartItem).filter(Boolean)
+    const parsedCart = savedItems ? JSON.parse(savedItems) : null
+    if (parsedCart?.userId !== userId || !Array.isArray(parsedCart.items)) return []
+    return parsedCart.items.map(normalizeCartItem).filter(Boolean)
   } catch (error) {
     console.error('Could not restore cart:', error)
     return []
@@ -56,7 +60,8 @@ function getSavedCartItems() {
 }
 
 function App() {
-  const [cartItems, setCartItems] = useState(getSavedCartItems)
+  const [cartItems, setCartItems] = useState([])
+  const [authInitialized, setAuthInitialized] = useState(false)
   const [paymentReference, setPaymentReference] = useState(() => {
     const callbackUrl = new URL(window.location.href)
     if (callbackUrl.searchParams.get('payment') !== 'paystack') return null
@@ -85,6 +90,11 @@ function App() {
   const logoutDialogRef = useRef(null)
   const isRecoveringPassword = useRef(false)
   const shouldScrollToAbout = useRef(false)
+  const activeUserId = useRef(null)
+  const hasInitializedAuth = useRef(false)
+  useEffect(() => {
+    console.log('Cart items:', cartItems)
+  }, [cartItems])
 
   useEffect(() => {
     const dialog = logoutDialogRef.current
@@ -98,12 +108,48 @@ function App() {
   }, [isLogoutDialogOpen])
 
   useEffect(() => {
+    if (!authInitialized) return
+
     try {
-      window.localStorage.setItem(savedCartKey, JSON.stringify(cartItems))
+      if (!user) {
+        window.localStorage.removeItem(savedCartKey)
+        return
+      }
+
+      window.localStorage.setItem(savedCartKey, JSON.stringify({
+        userId: user.id,
+        items: cartItems,
+      }))
     } catch (error) {
       console.error('Could not save cart:', error)
     }
-  }, [cartItems])
+  }, [authInitialized, cartItems, user])
+
+  const applyAuthSession = (session, isNewLogin = false) => {
+    const nextUser = session?.user ?? null
+    const nextUserId = nextUser?.id ?? null
+
+    setUser(nextUser)
+
+    if (!hasInitializedAuth.current) {
+      hasInitializedAuth.current = true
+      activeUserId.current = nextUserId
+      setCartItems(isNewLogin ? [] : getSavedCartItems(nextUserId))
+      setAuthInitialized(true)
+      return
+    }
+
+    if (isNewLogin || activeUserId.current !== nextUserId) {
+      console.log('CLEARING CART', {
+        isNewLogin,
+        currentUserId: activeUserId.current,
+        nextUserId,
+      })
+
+      activeUserId.current = nextUserId
+      setCartItems([])
+    }
+  }
 
   useEffect(() => {
     let isMounted = true
@@ -139,7 +185,7 @@ function App() {
       if (!isMounted) return
 
       const session = data.session
-      setUser(session?.user ?? null)
+      applyAuthSession(session)
       if (
         !isRecoveringPassword.current
         && new URLSearchParams(window.location.search).get('payment') !== 'paystack'
@@ -147,19 +193,32 @@ function App() {
         setCurrentView(session ? 'home' : 'account')
       }
     })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setUser(session?.user ?? null)
-      if (event === 'SIGNED_IN') setCurrentView('home')
-      if (event === 'PASSWORD_RECOVERY') {
-        isRecoveringPassword.current = true
-        setAuthMode('reset')
-        setCurrentView('account')
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        const wasLoggedOut = !activeUserId.current
+
+        applyAuthSession(
+          
+          session,
+          event === 'SIGNED_IN' && wasLoggedOut
+        )
+
+        if (event === 'SIGNED_IN' && wasLoggedOut) {
+          setCurrentView('home')
+        }
+
+        if (event === 'PASSWORD_RECOVERY') {
+          isRecoveringPassword.current = true
+          setAuthMode('reset')
+          setCurrentView('account')
+        }
+
+        if (event === 'SIGNED_OUT') {
+          setAuthMode('login')
+          setCurrentView('account')
+        }
       }
-      if (event === 'SIGNED_OUT') {
-        setAuthMode('login')
-        setCurrentView('account')
-      }
-    })
+    )
 
     return () => {
       isMounted = false
@@ -227,13 +286,11 @@ const placeOrder = async (deliveryDetails) => {
   setIsSubmittingOrder(true)
 
   const deliveryAddress = {
-    customer_name: deliveryDetails.customerName.trim(),
     phone: deliveryDetails.phone.trim(),
     address_line_1: deliveryDetails.addressLine1.trim(),
     address_line_2: deliveryDetails.addressLine2.trim(),
     city: deliveryDetails.city.trim(),
-    postal_code: deliveryDetails.postalCode.trim(),
-    country: deliveryDetails.country.trim(),
+    postal_code: deliveryDetails.postalCode.trim()
   }
 
   try {
@@ -393,6 +450,7 @@ const placeOrder = async (deliveryDetails) => {
         {user && <nav className="nav">
           <button type="button" onClick={() => setCurrentView('home')}>Home</button>
           <button type="button" onClick={() => { setSelectedCategory(null); setCurrentView('shop') }}>Shop</button>
+          <button type="button" onClick={() => setCurrentView('orders')}>Orders</button>
           <button type="button" onClick={() => {
             if (currentView === 'home') {
               document.getElementById('about-us')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -751,6 +809,12 @@ const placeOrder = async (deliveryDetails) => {
         {currentView === 'confirmation' && completedOrder && (
           <OrderConfirmation
             order={completedOrder}
+            onContinueShopping={() => setCurrentView('shop')}
+          />
+        )}
+        {currentView === 'orders' && user && (
+          <Orders
+            userId={user.id}
             onContinueShopping={() => setCurrentView('shop')}
           />
         )}

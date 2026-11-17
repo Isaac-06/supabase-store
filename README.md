@@ -73,7 +73,9 @@ supabase secrets set PAYSTACK_SECRET_KEY=your-paystack-secret-key APP_ORIGIN=htt
 supabase functions deploy paystack-payments --no-verify-jwt
 ```
 
-`APP_ORIGIN` must exactly match the storefront origin, including the scheme and port. Change it to the deployed storefront origin in production. The function is deployed with JWT gateway verification disabled so Paystack can call its webhook; its checkout and verification actions independently require a valid signed-in Supabase user. The function uses the platform-provided `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` secrets.
+`APP_ORIGIN` must exactly match the storefront origin, including the scheme and port (for example, `http://localhost:5173`). Change it to the deployed storefront origin in production. The function is deployed with JWT gateway verification disabled so Paystack can call its webhook; its checkout and verification actions independently validate the signed-in Supabase user. The server calculates the order total from current product prices, creates a pending order, and initializes a Paystack transaction. The return flow verifies the transaction before marking the order paid. The signed Paystack webhook independently verifies successful transactions and can mark the order paid if the customer does not return to the storefront. The function uses the platform-provided `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` secrets; the service-role key must remain server-side.
+
+The function accepts `initialize` and `verify` actions from signed-in users. The Paystack webhook uses the `x-paystack-signature` HMAC header, so do not remove signature validation or expose `PAYSTACK_SECRET_KEY` to the browser.
 
 In the Paystack dashboard, set the webhook URL to:
 
