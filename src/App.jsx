@@ -12,6 +12,7 @@ import ProductCard from './components/ProductCard'
 import { getSupabaseConfigError, isSupabaseConfigured, supabase } from './supabase.js'
 
 const savedCartKey = 'neoncart-items'
+const guestCartKey = 'neoncart-guest-items'
 
 function asNumber(value, fallback = 0) {
   const parsed = Number(value)
@@ -59,9 +60,154 @@ function getSavedCartItems(userId) {
   }
 }
 
+function getSavedGuestCartItems() {
+  try {
+    const savedCart = window.localStorage.getItem(guestCartKey)
+    const parsedCart = savedCart ? JSON.parse(savedCart) : null
+    if (!Array.isArray(parsedCart?.items)) return []
+    return parsedCart.items.map(normalizeCartItem).filter(Boolean)
+  } catch (error) {
+    console.error('Could not restore guest cart:', error)
+    return []
+  }
+}
+
+function mergeCartItems(savedItems, guestItems) {
+  const mergedItems = savedItems.map(normalizeCartItem).filter(Boolean)
+
+  guestItems.forEach((guestItem) => {
+    const guestKey = String(guestItem.id ?? guestItem.product_id)
+    const savedIndex = mergedItems.findIndex(
+      (savedItem) => String(savedItem.id ?? savedItem.product_id) === guestKey
+    )
+
+    if (savedIndex === -1) {
+      mergedItems.push(guestItem)
+      return
+    }
+
+    const savedItem = mergedItems[savedIndex]
+    mergedItems[savedIndex] = {
+      ...savedItem,
+      ...guestItem,
+      quantity: savedItem.quantity + guestItem.quantity,
+      customizationNotes: guestItem.customizationNotes || savedItem.customizationNotes || '',
+    }
+  })
+
+  return mergedItems
+}
+
+async function loadCartFromSupabase(userId) {
+  if (!userId || !isSupabaseConfigured) return []
+
+  try {
+    const { data, error } = await supabase
+      .from('cart_items')
+      .select('*')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false })
+
+    if (error) throw error
+
+    return (data ?? []).map((row) => ({
+      id: row.product_id,
+      product_id: row.product_id,
+      name: row.product_name,
+      price: asNumber(row.price, 0),
+      image: row.image || '',
+      quantity: Math.max(1, Math.trunc(asNumber(row.quantity, 1))),
+      customizationNotes: typeof row.customization_notes === 'string' ? row.customization_notes : '',
+    }))
+  } catch (error) {
+    console.error('Could not load cart from Supabase:', error)
+    return []
+  }
+}
+
+
+
+async function saveCartToSupabase(userId, items) {
+  if (!userId || !isSupabaseConfigured) return false
+const {
+  data: { user: authUser },
+ } = await supabase.auth.getUser();
+
+ console.log("Auth user:", authUser?.id);
+ console.log("Save userId:", userId);
+
+ if (!authUser || authUser.id !== userId) {
+  console.warn("Skipping cart sync: auth session not ready");
+  return false;
+ }
+
+
+  try {
+    const normalizedItems = items
+      .map((item) => {
+        const normalized = normalizeCartItem(item)
+        if (!normalized || !normalized.id) return null
+
+        return {
+          user_id: userId,
+          product_id: Number(normalized.id),
+          product_name: String(normalized.name || 'Product'),
+          price: Number(normalized.price || 0),
+          image: typeof normalized.image === 'string' ? normalized.image : '',
+          quantity: Math.max(1, Math.trunc(asNumber(normalized.quantity, 1))),
+          customization_notes: typeof normalized.customizationNotes === 'string' ? normalized.customizationNotes : '',
+          updated_at: new Date().toISOString(),
+        }
+      })
+      .filter(Boolean)
+
+    if (normalizedItems.length === 0) {
+      const { error } = await supabase.from('cart_items').delete().eq('user_id', userId)
+      if (error) throw error
+      return true
+    }
+   
+
+
+
+    const { error: upsertError } = await supabase
+      .from('cart_items')
+      .upsert(normalizedItems, { onConflict: 'user_id,product_id' })
+
+    if (upsertError) throw upsertError
+
+    const productIds = normalizedItems.map((item) => item.product_id)
+    const { data: existingRows, error: fetchError } = await supabase
+      .from('cart_items')
+      .select('product_id')
+      .eq('user_id', userId)
+
+    if (fetchError) throw fetchError
+
+    const staleIds = (existingRows ?? [])
+      .map((row) => Number(row.product_id))
+      .filter((productId) => !productIds.includes(productId))
+
+    if (staleIds.length > 0) {
+      const { error: deleteError } = await supabase
+        .from('cart_items')
+        .delete()
+        .eq('user_id', userId)
+        .in('product_id', staleIds)
+
+      if (deleteError) throw deleteError
+    }
+    return true
+  } catch (error) {
+    console.error('Could not sync cart with Supabase:', error)
+    return false
+  }
+}
+
 function App() {
   const [cartItems, setCartItems] = useState([])
   const [authInitialized, setAuthInitialized] = useState(false)
+  const [cartReady, setCartReady] = useState(false)
   const [paymentReference, setPaymentReference] = useState(() => {
     const callbackUrl = new URL(window.location.href)
     if (callbackUrl.searchParams.get('payment') !== 'paystack') return null
@@ -92,6 +238,7 @@ function App() {
   const shouldScrollToAbout = useRef(false)
   const activeUserId = useRef(null)
   const hasInitializedAuth = useRef(false)
+  const cartTransitionId = useRef(0)
   useEffect(() => {
     console.log('Cart items:', cartItems)
   }, [cartItems])
@@ -108,11 +255,20 @@ function App() {
   }, [isLogoutDialogOpen])
 
   useEffect(() => {
-    if (!authInitialized) return
+    if (!authInitialized || !cartReady) return
 
     try {
       if (!user) {
-        window.localStorage.removeItem(savedCartKey)
+        window.localStorage.setItem(guestCartKey, JSON.stringify({ items: cartItems }))
+        return
+      }
+
+      if (!isSupabaseConfigured) {
+        window.localStorage.setItem(savedCartKey, JSON.stringify({
+          userId: user.id,
+          items: cartItems,
+        }))
+        window.localStorage.removeItem(guestCartKey)
         return
       }
 
@@ -120,34 +276,46 @@ function App() {
         userId: user.id,
         items: cartItems,
       }))
+      window.localStorage.removeItem(guestCartKey)
+      void saveCartToSupabase(user.id, cartItems)
     } catch (error) {
       console.error('Could not save cart:', error)
     }
-  }, [authInitialized, cartItems, user])
+  }, [authInitialized, cartItems, cartReady, user])
 
-  const applyAuthSession = (session, isNewLogin = false) => {
+  const applyAuthSession = async (session, isNewLogin = false) => {
     const nextUser = session?.user ?? null
     const nextUserId = nextUser?.id ?? null
+    const previousUserId = activeUserId.current
+    const isInitialAuth = !hasInitializedAuth.current
+    const userChanged = previousUserId !== nextUserId
 
     setUser(nextUser)
 
-    if (!hasInitializedAuth.current) {
+    if (isInitialAuth || userChanged || isNewLogin) {
+      const transitionId = cartTransitionId.current + 1
+      cartTransitionId.current = transitionId
+      setCartReady(false)
       hasInitializedAuth.current = true
       activeUserId.current = nextUserId
-      setCartItems(isNewLogin ? [] : getSavedCartItems(nextUserId))
+
+      if (!nextUserId) {
+        setCartItems(getSavedGuestCartItems())
+        setCartReady(true)
+        setAuthInitialized(true)
+        return
+      }
+
+      const restoredCart = await loadCartFromSupabase(nextUserId)
+      if (cartTransitionId.current !== transitionId) return
+
+      const accountCart = restoredCart.length > 0
+        ? restoredCart
+        : getSavedCartItems(nextUserId)
+      const guestCart = previousUserId ? [] : getSavedGuestCartItems()
+      setCartItems(mergeCartItems(accountCart, guestCart))
+      setCartReady(true)
       setAuthInitialized(true)
-      return
-    }
-
-    if (isNewLogin || activeUserId.current !== nextUserId) {
-      console.log('CLEARING CART', {
-        isNewLogin,
-        currentUserId: activeUserId.current,
-        nextUserId,
-      })
-
-      activeUserId.current = nextUserId
-      setCartItems([])
     }
   }
 
@@ -185,7 +353,7 @@ function App() {
       if (!isMounted) return
 
       const session = data.session
-      applyAuthSession(session)
+      void applyAuthSession(session)
       if (
         !isRecoveringPassword.current
         && new URLSearchParams(window.location.search).get('payment') !== 'paystack'
@@ -197,8 +365,7 @@ function App() {
       (event, session) => {
         const wasLoggedOut = !activeUserId.current
 
-        applyAuthSession(
-          
+        void applyAuthSession(
           session,
           event === 'SIGNED_IN' && wasLoggedOut
         )
@@ -311,7 +478,21 @@ const placeOrder = async (deliveryDetails) => {
     window.location.assign(data.authorization_url)
   } catch (error) {
     console.error('Could not start Paystack payment:', error)
-    setCheckoutError(error.message || 'Could not start payment. Please try again.')
+    let message = error instanceof Error ? error.message : 'Could not start payment. Please try again.'
+    const response = error && typeof error === 'object' && 'context' in error
+      ? error.context
+      : null
+
+    if (response instanceof Response) {
+      try {
+        const body = await response.clone().json()
+        if (typeof body?.error === 'string') message = body.error
+      } catch (responseError) {
+        console.error('Could not read the payment function error response:', responseError)
+      }
+    }
+
+    setCheckoutError(message)
   } finally {
     setIsSubmittingOrder(false)
   }

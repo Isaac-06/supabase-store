@@ -59,6 +59,17 @@ create policy "Customers can view their own orders"
 	using (auth.uid() = user_id);
 ```
 
+The `20261117120000_order_delivery_details.sql` migration creates a one-to-one
+`order_delivery_details` record for each order, backfills existing delivery
+addresses from `orders.shipping_address` when the associated Auth user still
+exists, and restricts customer reads to the order owner. The payment Edge
+Function writes each new delivery snapshot to this table. Apply pending
+migrations to the linked hosted project with:
+
+```sh
+supabase db push --remote
+```
+
 The migration in `supabase/migrations/20261021000000_paystack_ngn_payments.sql` adds the Paystack reference and NGN amount columns, removes direct customer order insertion, and revokes access to any earlier `create_order` RPC. Apply it to the Supabase project before deploying the Edge Function:
 
 ```sh

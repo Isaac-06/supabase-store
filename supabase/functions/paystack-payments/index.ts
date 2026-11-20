@@ -233,6 +233,28 @@ async function initializePayment(body: Record<string, unknown>, user: {
     .single();
   if (insertError) throw new Error("Could not create your order. Please try again.");
 
+  const { error: deliveryDetailsError } = await admin
+    .from("order_delivery_details")
+    .insert({
+      order_id: order.id,
+      user_id: user.id,
+      phone: deliveryAddress.phone,
+      address_line_1: deliveryAddress.address_line_1,
+      address_line_2: deliveryAddress.address_line_2,
+      city: deliveryAddress.city,
+      postal_code: deliveryAddress.postal_code,
+    });
+  if (deliveryDetailsError) {
+    console.error("Could not save order delivery details:", deliveryDetailsError);
+    const { error: cancelError } = await admin
+      .from("orders")
+      .update({ status: "cancelled" })
+      .eq("id", order.id)
+      .eq("status", "pending");
+    if (cancelError) console.error("Could not cancel order without delivery details:", cancelError);
+    throw new PaymentError("Could not save your delivery details. Please try again.", 500);
+  }
+
   const callbackUrl = new URL("/", appOrigin);
   callbackUrl.searchParams.set("payment", "paystack");
 

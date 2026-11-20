@@ -40,9 +40,19 @@ function Checkout({ items = [], email, onBack, onPlaceOrder, isSubmitting, error
     })
 
     if (orderDetails.phone?.trim()) {
-      const phoneDigits = orderDetails.phone.trim().replace(/\D/g, '')
-      if (!/^[+()\d\s.-]+$/.test(orderDetails.phone.trim()) || phoneDigits.length < 7 || phoneDigits.length > 15) {
+      const enteredPhone = orderDetails.phone.trim()
+      const phoneDigits = enteredPhone.replace(/\D/g, '')
+      const digitsWithoutCountryCode = phoneDigits.startsWith('234')
+        ? phoneDigits.slice(3)
+        : phoneDigits
+      const nationalPhoneDigits = digitsWithoutCountryCode.startsWith('0')
+        ? digitsWithoutCountryCode.slice(1)
+        : digitsWithoutCountryCode
+
+      if (!/^[+()\d\s.-]+$/.test(enteredPhone) || nationalPhoneDigits.length < 7 || nationalPhoneDigits.length > 15) {
         errors.phone = 'Enter a phone number with 7 to 15 digits.'
+      } else {
+        orderDetails.phone = `+234${nationalPhoneDigits}`
       }
     }
 
@@ -84,16 +94,20 @@ function Checkout({ items = [], email, onBack, onPlaceOrder, isSubmitting, error
           <div className="checkout-fields">
             <label>
               Phone number
-              <input
-                name="phone"
-                type="tel"
-                autoComplete="tel"
-                maxLength="40"
-                required
-                aria-invalid={Boolean(fieldErrors.phone)}
-                aria-describedby={fieldErrors.phone ? 'checkout-phone-error' : undefined}
-                onChange={() => clearFieldError('phone')}
-              />
+              <span className="checkout-phone-input">
+                <span className="checkout-phone-prefix">+234</span>
+                <input
+                  name="phone"
+                  type="tel"
+                  autoComplete="tel-national"
+                  placeholder="8012345678"
+                  maxLength="40"
+                  required
+                  aria-invalid={Boolean(fieldErrors.phone)}
+                  aria-describedby={fieldErrors.phone ? 'checkout-phone-error' : undefined}
+                  onChange={() => clearFieldError('phone')}
+                />
+              </span>
               {fieldErrors.phone && <span className="checkout-field-error" id="checkout-phone-error">{fieldErrors.phone}</span>}
             </label>
             <label className="checkout-field-full">
