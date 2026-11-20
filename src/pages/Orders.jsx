@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase.js'
 import { formatCurrency } from '../utils/currency'
 
@@ -14,7 +15,8 @@ function formatConfirmationDate(value, status) {
   }).format(date)
 }
 
-function Orders({ userId, onContinueShopping }) {
+function Orders({ userId }) {
+  const navigate = useNavigate()
   const [orders, setOrders] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
@@ -53,12 +55,23 @@ function Orders({ userId, onContinueShopping }) {
   return (
     <section className="orders-page" aria-labelledby="orders-title">
       <div className="orders-page__header">
-        <div>
-          <p className="eyebrow">Your account</p>
-          <h1 id="orders-title">Your orders</h1>
-          <p>Review your order history and payment confirmation dates.</p>
+        <div className="orders-page__heading">
+          <button
+            type="button"
+            className="back-arrow-button"
+            aria-label="Back to home"
+            title="Back to home"
+            onClick={() => navigate('/shop')}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">arrow_back_ios</span>
+          </button>
+          <div>
+            <p className="eyebrow">Your account</p>
+            <h1 id="orders-title">Your orders</h1>
+            <p>Review your order history and payment confirmation dates.</p>
+          </div>
         </div>
-        <button type="button" className="categories-browse-all" onClick={onContinueShopping}>
+        <button type="button" className="categories-browse-all" onClick={() => navigate('/shop')}>
           Continue shopping
         </button>
       </div>

@@ -1,18 +1,33 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
-import Home from './pages/Home'
+import AboutUs from './pages/AboutUs'
 import Cart from './pages/Cart'
 import Checkout from './pages/Checkout'
 import OrderConfirmation from './pages/OrderConfirmation'
 import Orders from './pages/Orders'
 import ProductDetails from './pages/ProductDetails'
+import HomePage from './pages/HomePage'
+import ShopPage from './pages/ShopPage'
 import Login from './pages/Login'
 import SignUp from './pages/SignUp'
-import ProductCard from './components/ProductCard'
-import { getSupabaseConfigError, isSupabaseConfigured, supabase } from './supabase.js'
+import useProducts from './hooks/useProducts'
+import { isSupabaseConfigured, supabase } from './supabase.js'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 
 const savedCartKey = 'neoncart-items'
 const guestCartKey = 'neoncart-guest-items'
+const viewPaths = {
+  home: '/',
+  shop: '/shop',
+  orders: '/orders',
+  about: '/about',
+  account: '/account',
+  details: '/details',
+  cart: '/cart',
+  checkout: '/checkout',
+  payment: '/payment',
+  confirmation: '/confirmation',
+}
 
 function asNumber(value, fallback = 0) {
   const parsed = Number(value)
@@ -34,17 +49,6 @@ function normalizeCartItem(item) {
 
 
 
-
-function getProductCategory(product) {
-  const category = product.specifications?.Category
-  const use = product.specifications?.Use
-  const isGamingProduct = [category, use, product.name].some(
-    (value) => typeof value === 'string' && /\bgaming\b/i.test(value)
-  )
-
-  if (isGamingProduct) return 'Gaming'
-  return typeof category === 'string' ? category.trim() : ''
-}
 
 function getSavedCartItems(userId) {
   if (!userId) return []
@@ -205,6 +209,14 @@ const {
 }
 
 function App() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const setCurrentView = useCallback((view) => {
+    const path = viewPaths[view]
+    if (!path) throw new Error(`Unknown app view: ${view}`)
+    navigate(path)
+  }, [navigate])
+  const { products, isLoading: productsLoading, error: productsError } = useProducts()
   const [cartItems, setCartItems] = useState([])
   const [authInitialized, setAuthInitialized] = useState(false)
   const [cartReady, setCartReady] = useState(false)
@@ -213,17 +225,8 @@ function App() {
     if (callbackUrl.searchParams.get('payment') !== 'paystack') return null
     return callbackUrl.searchParams.get('reference') || callbackUrl.searchParams.get('trxref') || ''
   })
-  const [currentView, setCurrentView] = useState('account')
   const [authMode, setAuthMode] = useState('login')
   const [selectedProduct, setSelectedProduct] = useState(null)
-  const [selectedCategory, setSelectedCategory] = useState(null)
-  const [heroSlide, setHeroSlide] = useState(0)
-  const [isHeroPlaying, setIsHeroPlaying] = useState(
-    () => !window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  )
-  const [products, setProducts] = useState([])
-  const [productsLoading, setProductsLoading] = useState(true)
-  const [productsError, setProductsError] = useState('')
   const [user, setUser] = useState(null)
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false)
   const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false)
@@ -235,7 +238,6 @@ function App() {
   const toastTimer = useRef(null)
   const logoutDialogRef = useRef(null)
   const isRecoveringPassword = useRef(false)
-  const shouldScrollToAbout = useRef(false)
   const activeUserId = useRef(null)
   const hasInitializedAuth = useRef(false)
   const cartTransitionId = useRef(0)
@@ -320,46 +322,14 @@ function App() {
   }
 
   useEffect(() => {
+    if (!isSupabaseConfigured) return undefined
     let isMounted = true
 
-    async function loadProducts() {
-      if (!isSupabaseConfigured) {
-        if (!isMounted) return
-        setProductsError(getSupabaseConfigError())
-        setProductsLoading(false)
-        return
-      }
-
-      const { data, error } = await supabase.from('products').select('*').order('id')
-      if (!isMounted) return
-
-      if (error) {
-        setProductsError(error.message)
-      } else {
-        setProducts(data.map((product) => ({
-          ...product,
-          varieties: Array.isArray(product.varieties) ? product.varieties.flat() : [],
-          specifications: product.specifications && typeof product.specifications === 'object' ? product.specifications : {},
-        })))
-      }
-      setProductsLoading(false)
-    }
-
-    loadProducts()
-    if (!isSupabaseConfigured) return () => {
-      isMounted = false
-    }
     supabase.auth.getSession().then(({ data }) => {
       if (!isMounted) return
 
       const session = data.session
       void applyAuthSession(session)
-      if (
-        !isRecoveringPassword.current
-        && new URLSearchParams(window.location.search).get('payment') !== 'paystack'
-      ) {
-        setCurrentView(session ? 'home' : 'account')
-      }
     })
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
@@ -391,7 +361,7 @@ function App() {
       isMounted = false
       subscription.unsubscribe()
     }
-  }, [])
+  }, [setCurrentView])
 
     const showToast = (message) => {
     setToastMessage(message)
@@ -497,49 +467,15 @@ const placeOrder = async (deliveryDetails) => {
     setIsSubmittingOrder(false)
   }
 }
-  
 
   const totalItems = cartItems.reduce((sum, item) => sum + Math.max(0, Math.trunc(asNumber(item.quantity, 0))), 0)
-  const activeHeroSlide = products.length > 0 ? heroSlide % products.length : 0
-  const activeHeroProduct = products[activeHeroSlide]
-  const categories = [...new Set(
-    products
-      .map(getProductCategory)
-      .filter(Boolean)
-  )].sort((left, right) => left.localeCompare(right))
   const displayName = typeof user?.user_metadata?.name === 'string'
     ? user.user_metadata.name.trim()
     : ''
 
   useEffect(() => {
-    const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)')
-    const handleMotionPreferenceChange = (event) => {
-      if (event.matches) setIsHeroPlaying(false)
-    }
-
-    motionPreference.addEventListener('change', handleMotionPreferenceChange)
-    return () => motionPreference.removeEventListener('change', handleMotionPreferenceChange)
-  }, [])
-
-  useEffect(() => {
-    if (currentView !== 'home' || products.length < 2 || !isHeroPlaying) return
-
-    const intervalId = window.setInterval(() => {
-      setHeroSlide((activeHeroSlide + 1) % products.length)
-    }, 5000)
-
-    return () => window.clearInterval(intervalId)
-  }, [activeHeroSlide, currentView, isHeroPlaying, products.length])
-
-  useEffect(() => {
-    if (currentView === 'home' && shouldScrollToAbout.current) {
-      document.getElementById('about-us')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      shouldScrollToAbout.current = false
-      return
-    }
-
     window.scrollTo(0, 0)
-  }, [currentView])
+  }, [location.pathname])
 
   useEffect(() => {
     if (paymentReference === null || !user) return
@@ -584,7 +520,7 @@ const placeOrder = async (deliveryDetails) => {
     return () => {
       isActive = false
     }
-  }, [paymentReference, user])
+  }, [paymentReference, setCurrentView, user])
 
   const handleLogout = async () => {
     setIsSigningOut(true)
@@ -610,6 +546,123 @@ const placeOrder = async (deliveryDetails) => {
     }
   }
 
+  const requireUser = (element) => {
+    if (isSupabaseConfigured && !authInitialized) {
+      return <p className="product-status" role="status">Loading your account...</p>
+    }
+
+    return user ? element : <Navigate to="/account" replace />
+  }
+
+  const homePage = (
+    <HomePage
+      products={products}
+      productsLoading={productsLoading}
+      productsError={productsError}
+      onViewProduct={(product) => {
+        setSelectedProduct(product)
+        setCurrentView('details')
+      }}
+      addToCart={addToCart}
+    />
+  )
+
+  const shopPage = (
+    <ShopPage
+      products={products}
+      productsLoading={productsLoading}
+      productsError={productsError}
+      addToCart={addToCart}
+      onViewProduct={(product) => {
+        setSelectedProduct(product)
+        setCurrentView('details')
+      }}
+    />
+  )
+
+  const aboutPage = <AboutUs />
+
+  const accountPage = (
+    <section className="account-page">
+      {authMode !== 'reset' && <div className="auth-tabs" role="tablist" aria-label="Account">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={authMode === 'login'}
+          className={authMode === 'login' ? 'active' : ''}
+          onClick={() => setAuthMode('login')}
+        >
+          Sign in
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={authMode === 'signup'}
+          className={authMode === 'signup' ? 'active' : ''}
+          onClick={() => setAuthMode('signup')}
+        >
+          Sign up
+        </button>
+      </div>}
+      {authMode === 'login' || authMode === 'reset'
+        ? <Login
+            onAuthenticated={() => setCurrentView('home')}
+            isPasswordRecovery={authMode === 'reset'}
+            onPasswordUpdated={() => {
+              isRecoveringPassword.current = false
+              setAuthMode('login')
+              setCurrentView('home')
+            }}
+          />
+        : <SignUp onAuthenticated={() => setCurrentView('home')} />}
+    </section>
+  )
+
+  const detailsPage = selectedProduct
+    ? (
+      <ProductDetails
+        product={selectedProduct}
+        onBack={() => setCurrentView('shop')}
+        onAddToCart={(customizationNotes) => {
+          addToCart(selectedProduct, customizationNotes)
+          setCurrentView('cart')
+        }}
+      />
+    )
+    : <Navigate to="/shop" replace />
+
+  const cartPage = (
+    <Cart
+      items={cartItems}
+      removeFromCart={removeFromCart}
+      updateQuantity={updateQuantity}
+      onBack={() => setCurrentView('shop')}
+      onCheckout={() => {
+        setCheckoutError('')
+        setCurrentView('checkout')
+      }}
+    />
+  )
+
+  const checkoutPage = (
+    <Checkout
+      items={cartItems}
+      email={user?.email ?? ''}
+      onBack={() => setCurrentView('cart')}
+      onPlaceOrder={placeOrder}
+      isSubmitting={isSubmittingOrder}
+      error={checkoutError}
+    />
+  )
+
+  const ordersPage = user
+    ? <Orders userId={user.id} />
+    : <Navigate to="/account" replace />
+
+  const confirmationPage = completedOrder
+    ? <OrderConfirmation order={completedOrder} onContinueShopping={() => setCurrentView('shop')} />
+    : <Navigate to="/shop" replace />
+
   return (
     <div className="app-shell">
       {toastMessage && (
@@ -630,16 +683,9 @@ const placeOrder = async (deliveryDetails) => {
 
         {user && <nav className="nav">
           <button type="button" onClick={() => setCurrentView('home')}>Home</button>
-          <button type="button" onClick={() => { setSelectedCategory(null); setCurrentView('shop') }}>Shop</button>
+          <button type="button" onClick={() => setCurrentView('shop')}>Shop</button>
           <button type="button" onClick={() => setCurrentView('orders')}>Orders</button>
-          <button type="button" onClick={() => {
-            if (currentView === 'home') {
-              document.getElementById('about-us')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-              return
-            }
-            shouldScrollToAbout.current = true
-            setCurrentView('home')
-          }}>About Us</button>
+          <button type="button" onClick={() => setCurrentView('about')}>About Us</button>
         </nav>}
 
         <div className="account-actions">
@@ -682,323 +728,31 @@ const placeOrder = async (deliveryDetails) => {
       </header>
 
       <main className="page-content">
-        {currentView === 'home' && products.length > 0 && <section className="hero-section">
-          <div className="hero-copy">
-            <p className="eyebrow">New season essentials</p>
-            <h1>Upgrade your setup with smarter tech.</h1>
-            <p className="hero-text">
-              Discover premium gear built for performance, comfort, and everyday life.
-            </p>
-
-            <div className="hero-actions">
-              <button type="button" className="primary-btn" onClick={() => { setSelectedCategory(null); setCurrentView('shop') }}>Shop now</button>
-              <button
-                type="button"
-                className="secondary-btn"
-                onClick={() => document.getElementById('shop-categories')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-              >
-                Explore categories
-              </button>
-            </div>
-               
-               
-            <div className="hero-stats">
-              <div>
-                <strong>{products.length}</strong>
-                <span>Products to explore</span>
-              </div>
-              <div>
-                <strong>{categories.length}</strong>
-                <span>Shop categories</span>
-              </div>
-              <div className="hero-stats__payment" aria-label="Payment partner: Paystack">
-                <span className="hero-stats__payment-label">Payment partner</span>
-                <img className="hero-stats__logo" src="/paystack.png" alt="Paystack" />
-              </div>
-            </div>
-          </div>
-           
-          
-          <div className="hero-visual">
-            <div className="hero-carousel" aria-label="Featured products">
-              <div className="hero-carousel__image-wrap">
-                <img
-                  className="hero-carousel__image"
-                  src={activeHeroProduct.image}
-                  alt={activeHeroProduct.name}
-                  key={activeHeroProduct.id}
-                />
-                <span className="hero-carousel__counter" aria-live="polite">
-                  {activeHeroSlide + 1} / {products.length}
-                </span>
-              </div>
-
-              <div className="hero-carousel__footer">
-                <div className="hero-carousel__product">
-                  <span className="hero-carousel__eyebrow">Featured product</span>
-                  <h2>{activeHeroProduct.name}</h2>
-                </div>
-                <button
-                  type="button"
-                  className="hero-carousel__view"
-                  onClick={() => {
-                    setSelectedProduct(activeHeroProduct)
-                    setCurrentView('details')
-                  }}
-                >
-                  View product
-                </button>
-              </div>
-
-              {products.length > 1 && (
-                <div className="hero-carousel__controls" aria-label="Featured product controls">
-                  <button
-                    type="button"
-                    className="hero-carousel__arrow"
-                    aria-label="Previous featured product"
-                    onClick={() => setHeroSlide((current) => (current - 1 + products.length) % products.length)}
-                  >
-                    <span aria-hidden="true">‹</span>
-                  </button>
-                  <div className="hero-carousel__dots" aria-label="Choose a featured product">
-                    {products.map((product, index) => (
-                      <button
-                        key={product.id ?? product.name}
-                        type="button"
-                        className={`hero-carousel__dot${index === activeHeroSlide ? ' is-active' : ''}`}
-                        aria-label={`Show ${product.name}`}
-                        aria-current={index === activeHeroSlide ? 'true' : undefined}
-                        onClick={() => setHeroSlide(index)}
-                      />
-                    ))}
-                  </div>
-                  <button
-                    type="button"
-                    className="hero-carousel__autoplay"
-                    aria-label={isHeroPlaying ? 'Pause automatic slide rotation' : 'Resume automatic slide rotation'}
-                    aria-pressed={!isHeroPlaying}
-                    onClick={() => setIsHeroPlaying((playing) => !playing)}
-                  >
-                    {isHeroPlaying ? 'Pause' : 'Play'}
-                  </button>
-                  <button
-                    type="button"
-                    className="hero-carousel__arrow"
-                    aria-label="Next featured product"
-                    onClick={() => setHeroSlide((current) => (current + 1) % products.length)}
-                  >
-                    <span aria-hidden="true">›</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </section>}
-
-        {currentView === 'home' && (
-          <section className="categories-section" id="shop-categories" aria-labelledby="categories-title">
-            <div className="section-header">
-              <div>
-                <p className="eyebrow categories-eyebrow">Category</p>
-                <h2 id="categories-title">Shop by category</h2>
-                <p>Find the right gear for every part of your setup</p>
-              </div>
-              <button
-                type="button"
-                className="categories-browse-all"
-                onClick={() => {
-                  setSelectedCategory(null)
-                  setCurrentView('shop')
-                }}
-              >
-                Browse all products
-              </button>
-            </div>
-
-            {productsLoading && <p className="product-status" role="status">Loading categories...</p>}
-            {productsError && <p className="product-status error" role="alert">Could not load categories: {productsError}</p>}
-            {!productsLoading && !productsError && categories.length > 0 && (
-              <div className="category-grid">
-                {categories.map((category) => {
-                  const categoryProducts = products.filter((product) => getProductCategory(product) === category)
-                  const categoryImage = categoryProducts.find((product) => product.image)?.image
-
-                  return (
-                    <button
-                      key={category}
-                      type="button"
-                      className="category-card"
-                      onClick={() => {
-                        setSelectedCategory(category)
-                        setCurrentView('shop')
-                      }}
-                    >
-                      {categoryImage && <img src={categoryImage} alt="" />}
-                      <span className="category-card__content">
-                        <strong>{category}</strong>
-                        <span>{categoryProducts.length} {categoryProducts.length === 1 ? 'product' : 'products'}</span>
-                      </span>
-                      <span className="category-card__arrow" aria-hidden="true">→</span>
-                    </button>
-                  )
-                })}
-              </div>
+        <Routes>
+          <Route path="/" element={requireUser(homePage)} />
+          <Route path="/shop" element={requireUser(shopPage)} />
+          <Route path="/orders" element={requireUser(ordersPage)} />
+          <Route path="/about" element={requireUser(aboutPage)} />
+          <Route
+            path="/account"
+            element={isSupabaseConfigured && !authInitialized
+              ? <p className="product-status" role="status">Loading your account...</p>
+              : user ? <Navigate to="/" replace /> : accountPage}
+          />
+          <Route path="/details" element={requireUser(detailsPage)} />
+          <Route path="/cart" element={requireUser(cartPage)} />
+          <Route path="/checkout" element={requireUser(checkoutPage)} />
+          <Route
+            path="/payment"
+            element={requireUser(
+              paymentReference !== null
+                ? <p className="product-status" role="status">Verifying your Paystack payment...</p>
+                : <Navigate to="/shop" replace />
             )}
-            {!productsLoading && !productsError && products.length === 0 && (
-              <p className="product-status">Categories will appear when products are available.</p>
-            )}
-            {!productsLoading && !productsError && products.length > 0 && categories.length === 0 && (
-              <p className="product-status">No product categories are available yet.</p>
-            )}
-          </section>
-        )}
-
-        {currentView === 'home' && products.length > 0 && (
-          <section className="home-featured-section" aria-labelledby="home-featured-title">
-            <div className="section-header">
-              <div>
-                <h2 id="home-featured-title">Explore products</h2>
-                <p>A few products to get you started</p>
-              </div>
-              <button
-                type="button"
-                className="categories-browse-all"
-                onClick={() => {
-                  setSelectedCategory(null)
-                  setCurrentView('shop')
-                }}
-              >
-                View all products
-              </button>
-            </div>
-            <div className="product-grid">
-              {products.slice(0, 4).map((product) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  addToCart={addToCart}
-                  onViewProduct={(selected) => {
-                    setSelectedProduct(selected)
-                    setCurrentView('details')
-                  }}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {currentView === 'home' && (
-          <section className="about-section" id="about-us" aria-labelledby="about-us-title">
-            <p className="eyebrow">About NeonCart</p>
-            <h2 id="about-us-title">Tech for work, play, and everyday life.</h2>
-            <p>
-              We make it easier to find the right gear for your setup by bringing thoughtfully
-              selected products together in one place, so you can spend less time searching and
-              more time enjoying your technology.
-            </p>
-          </section>
-        )}
-
-        {currentView === 'shop' && (
-          <Home
-            products={selectedCategory
-              ? products.filter((product) => getProductCategory(product) === selectedCategory)
-              : products}
-            addToCart={addToCart}
-            selectedCategory={selectedCategory}
-            onClearCategory={() => setSelectedCategory(null)}
-            onBack={() => setCurrentView('home')}
-            onViewProduct={(product) => {
-              setSelectedProduct(product)
-              setCurrentView('details')
-            }}
           />
-        )}
-        {currentView === 'shop' && productsLoading && <p className="product-status" role="status">Loading products...</p>}
-        {currentView === 'shop' && productsError && <p className="product-status error" role="alert">Could not load products: {productsError}</p>}
-        {currentView === 'shop' && !productsLoading && !productsError && products.length === 0 && <p className="product-status">No products are available yet.</p>}
-        {currentView === 'account' && (
-          <section className="account-page">
-            {authMode !== 'reset' && <div className="auth-tabs" role="tablist" aria-label="Account">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={authMode === 'login'}
-                className={authMode === 'login' ? 'active' : ''}
-                onClick={() => setAuthMode('login')}
-              >
-                Sign in
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={authMode === 'signup'}
-                className={authMode === 'signup' ? 'active' : ''}
-                onClick={() => setAuthMode('signup')}
-              >
-                Sign up
-              </button>
-            </div>}
-            {authMode === 'login' || authMode === 'reset'
-              ? <Login
-                  onAuthenticated={() => setCurrentView('home')}
-                  isPasswordRecovery={authMode === 'reset'}
-                  onPasswordUpdated={() => {
-                    isRecoveringPassword.current = false
-                    setAuthMode('login')
-                    setCurrentView('home')
-                  }}
-                />
-              : <SignUp onAuthenticated={() => setCurrentView('home')} />}
-          </section>
-        )}
-        {currentView === 'details' && selectedProduct && (
-          <ProductDetails
-            product={selectedProduct}
-            onBack={() => setCurrentView('shop')}
-            onAddToCart={(customizationNotes) => {
-              addToCart(selectedProduct, customizationNotes)
-              setCurrentView('cart')
-            }}
-          />
-        )}
-        {currentView === 'cart' && (
-          <Cart
-            items={cartItems}
-            removeFromCart={removeFromCart}
-            updateQuantity={updateQuantity}
-            onBack={() => setCurrentView('shop')}
-            onCheckout={() => {
-              setCheckoutError('')
-              setCurrentView('checkout')
-            }}
-          />
-        )}
-        {currentView === 'checkout' && (
-          <Checkout
-            items={cartItems}
-            email={user?.email ?? ''}
-            onBack={() => setCurrentView('cart')}
-            onPlaceOrder={placeOrder}
-            isSubmitting={isSubmittingOrder}
-            error={checkoutError}
-          />
-        )}
-        {currentView === 'payment' && (
-          <p className="product-status" role="status">Verifying your Paystack payment...</p>
-        )}
-        {currentView === 'confirmation' && completedOrder && (
-          <OrderConfirmation
-            order={completedOrder}
-            onContinueShopping={() => setCurrentView('shop')}
-          />
-        )}
-        {currentView === 'orders' && user && (
-          <Orders
-            userId={user.id}
-            onContinueShopping={() => setCurrentView('shop')}
-          />
-        )}
+          <Route path="/confirmation" element={requireUser(confirmationPage)} />
+          <Route path="*" element={<Navigate to={user ? '/' : '/account'} replace />} />
+        </Routes>
       </main>
 
       <dialog
