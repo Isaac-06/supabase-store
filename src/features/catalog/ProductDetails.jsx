@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { formatCurrency } from '../utils/currency'
+import { formatCurrency } from '../../shared/utils/currency'
 
 //When product details is opened,display:
 // product information,

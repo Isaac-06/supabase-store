@@ -4,8 +4,8 @@ import {
   getSupabaseConfigError,
   isSupabaseConfigured,
   supabase,
-} from '../supabase.js'
-import PasswordStrength from '../components/PasswordStrength.jsx'
+} from '../../shared/services/supabase.js'
+import PasswordStrength from './PasswordStrength.jsx'
 
 function SignUp({ onAuthenticated }) {
   const [name, setName] = useState('')

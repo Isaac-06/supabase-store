@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getSupabaseConfigError, isSupabaseConfigured, supabase } from '../supabase.js'
+import { getSupabaseConfigError, isSupabaseConfigured, supabase } from '../../shared/services/supabase.js'
 
 export default function useProducts() {
   const [products, setProducts] = useState([])

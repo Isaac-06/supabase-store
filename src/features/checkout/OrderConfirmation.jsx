@@ -1,4 +1,4 @@
-import { formatCurrency } from '../utils/currency'
+import { formatCurrency } from '../../shared/utils/currency'
 
 function OrderConfirmation({ order, onContinueShopping }) {
   return (

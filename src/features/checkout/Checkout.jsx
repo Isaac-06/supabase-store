@@ -1,17 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
-import { formatCurrency } from '../utils/currency'
+import { formatCurrency } from '../../shared/utils/currency'
 
-function Checkout({ items = [], email, onBack, onPlaceOrder, isSubmitting, error }) {
+function Checkout({
+  items = [],
+  email,
+  onBack,
+  onPlaceOrder,
+  isSubmitting,
+  error,
+  quoteError,
+  quoteTotal = 0,
+  isQuoting,
+  quoteReady,
+  priceChanged,
+  onRefreshQuote,
+}) {
   const [isPaymentConfirmationOpen, setIsPaymentConfirmationOpen] = useState(false)
   const [pendingOrderDetails, setPendingOrderDetails] = useState(null)
   const [fieldErrors, setFieldErrors] = useState({})
   const paymentConfirmationDialogRef = useRef(null)
-  const total = items.reduce((sum, item) => {
-    const price = Number(item.price) || 0
-    const quantity = Math.max(0, Number(item.quantity) || 0)
-    return sum + price * quantity
-  }, 0)
-
   useEffect(() => {
     const dialog = paymentConfirmationDialogRef.current
     if (!dialog) return
@@ -25,6 +32,8 @@ function Checkout({ items = [], email, onBack, onPlaceOrder, isSubmitting, error
 
   function handleSubmit(event) {
     event.preventDefault()
+    if (!quoteReady) return
+
     const formData = new FormData(event.currentTarget)
     const orderDetails = Object.fromEntries(formData.entries())
     const errors = {}
@@ -73,7 +82,7 @@ function Checkout({ items = [], email, onBack, onPlaceOrder, isSubmitting, error
   }
 
   function handleConfirmPayment() {
-    if (!pendingOrderDetails) return
+    if (!pendingOrderDetails || !quoteReady) return
     onPlaceOrder(pendingOrderDetails)
     setPendingOrderDetails(null)
     setIsPaymentConfirmationOpen(false)
@@ -159,9 +168,27 @@ function Checkout({ items = [], email, onBack, onPlaceOrder, isSubmitting, error
           </div>
 
           {error && <p className="checkout-error" role="alert">{error}</p>}
+          {quoteError && (
+            <div className="checkout-error" role="alert">
+              <p>{quoteError}</p>
+              <button type="button" className="secondary-btn" onClick={onRefreshQuote} disabled={isQuoting}>
+                {isQuoting ? 'Refreshing prices...' : 'Refresh prices'}
+              </button>
+            </div>
+          )}
+          {priceChanged && !quoteError && (
+            <p className="checkout-price-notice" role="status">
+              Product prices have changed since they were added to your cart. Review the updated total before continuing.
+            </p>
+          )}
+          {isQuoting && <p className="product-status" role="status">Checking current product prices...</p>}
 
-          <button className="primary-btn checkout-submit" type="submit" disabled={isSubmitting || items.length === 0}>
-            {isSubmitting ? 'Connecting to Paystack...' : 'Pay with Paystack'}
+          <button
+            className="primary-btn checkout-submit"
+            type="submit"
+            disabled={isSubmitting || isQuoting || !quoteReady || Boolean(quoteError) || items.length === 0}
+          >
+            {isSubmitting ? 'Connecting to Paystack...' : isQuoting ? 'Checking current prices...' : 'Pay with Paystack'}
           </button>
           <p className="checkout-payment-note">You will be redirected to Paystack to complete your payment in NGN.</p>
         </form>
@@ -170,7 +197,7 @@ function Checkout({ items = [], email, onBack, onPlaceOrder, isSubmitting, error
           <h2>Order summary</h2>
           <div className="checkout-items">
             {items.map((item) => (
-              <div className="checkout-summary-item" key={item.id}>
+              <div className="checkout-summary-item" key={item.product_id}>
                 <img src={item.image} alt="" />
                 <div>
                   <strong>{item.name}</strong>
@@ -188,7 +215,7 @@ function Checkout({ items = [], email, onBack, onPlaceOrder, isSubmitting, error
           </div>
           <div className="checkout-total">
             <span>Total</span>
-            <strong>{formatCurrency(total)}</strong>
+            <strong>{formatCurrency(quoteTotal)}</strong>
           </div>
         </aside>
       </div>
@@ -206,7 +233,7 @@ function Checkout({ items = [], email, onBack, onPlaceOrder, isSubmitting, error
         <div className="logout-dialog__content">
           <h2 id="payment-confirmation-title">Confirm your payment</h2>
           <p id="payment-confirmation-description">
-            Your order total is {formatCurrency(total)}. Continue to Paystack to complete your payment securely in NGN.
+            Your order total is {formatCurrency(quoteTotal)}. Continue to Paystack to complete your payment securely in NGN.
           </p>
           <div className="logout-dialog__actions">
             <button
@@ -222,7 +249,7 @@ function Checkout({ items = [], email, onBack, onPlaceOrder, isSubmitting, error
               type="button"
               className="logout-dialog__confirm"
               onClick={handleConfirmPayment}
-              disabled={isSubmitting || !pendingOrderDetails}
+              disabled={isSubmitting || isQuoting || !quoteReady || !pendingOrderDetails}
             >
               {isSubmitting ? 'Connecting to Paystack...' : 'Continue to payment'}
             </button>

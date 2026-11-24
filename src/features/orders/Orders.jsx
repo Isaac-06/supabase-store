@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../supabase.js'
-import { formatCurrency } from '../utils/currency'
+import { supabase } from '../../shared/services/supabase.js'
+import { formatCurrency } from '../../shared/utils/currency'
 
 function formatConfirmationDate(value, status) {
   if (!value) return status === 'paid' ? 'Confirmation date unavailable' : 'Payment not confirmed'

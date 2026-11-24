@@ -106,6 +106,94 @@ function validateCartItems(value: unknown): CartRequestItem[] {
   });
 }
 
+function validateExpectedItems(value: unknown, items: CartRequestItem[]) {
+  if (!Array.isArray(value) || value.length !== items.length) {
+    throw new PaymentError("Your order changed. Review the current prices before paying.", 409);
+  }
+
+  return value.map((entry, index) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new PaymentError("Your order changed. Review the current prices before paying.", 409);
+    }
+
+    const expected = entry as Record<string, unknown>;
+    const price = expected.price;
+    const quantity = expected.quantity;
+    if (
+      String(expected.product_id) !== String(items[index].product_id) ||
+      quantity !== items[index].quantity ||
+      typeof price !== "number" ||
+      !Number.isFinite(price) ||
+      price < 0 ||
+      !Number.isSafeInteger(Math.round(price * 100))
+    ) {
+      throw new PaymentError("Your order changed. Review the current prices before paying.", 409);
+    }
+
+    return Math.round(price * 100);
+  });
+}
+
+async function priceCartItems(items: CartRequestItem[], admin: ReturnType<typeof getAdminClient>) {
+  const productIds = [...new Set(items.map((item) => String(item.product_id)))];
+  const { data: products, error: productError } = await admin
+    .from("products")
+    .select("id, name, price, image")
+    .in("id", productIds);
+  if (productError) throw new Error("Could not load product prices. Please try again.");
+  if (!products || products.length !== productIds.length) {
+    throw new PaymentError("One or more products in your cart are no longer available.");
+  }
+
+  const productById = new Map(products.map((product) => [String(product.id), product]));
+  const calculatedItems = items.map((item) => {
+    const product = productById.get(String(item.product_id));
+    if (!product) {
+      throw new PaymentError("One or more products in your cart are no longer available.");
+    }
+
+    const price = Number(product.price);
+    const priceKobo = Math.round(price * 100);
+    if (!Number.isFinite(price) || price < 0 || !Number.isSafeInteger(priceKobo)) {
+      throw new Error("A product has an invalid price.");
+    }
+    const lineTotalKobo = priceKobo * item.quantity;
+    if (!Number.isSafeInteger(lineTotalKobo)) {
+      throw new PaymentError("The order total is too large.");
+    }
+
+    return {
+      lineTotalKobo,
+      orderItem: {
+        product_id: product.id,
+        name: product.name,
+        price: priceKobo / 100,
+        quantity: item.quantity,
+        customization_notes: item.customization_notes,
+      },
+      quoteItem: {
+        product_id: product.id,
+        name: product.name,
+        image: product.image || "",
+        price: priceKobo / 100,
+        quantity: item.quantity,
+        customization_notes: item.customization_notes,
+      },
+    };
+  });
+
+  const totalKobo = calculatedItems.reduce((sum, item) => sum + item.lineTotalKobo, 0);
+  if (!Number.isSafeInteger(totalKobo) || totalKobo < 1 || totalKobo > 9_999_999_999) {
+    throw new PaymentError("The order total must be positive and within the supported limit.");
+  }
+
+  return {
+    totalKobo,
+    orderItems: calculatedItems.map((item) => item.orderItem),
+    quoteItems: calculatedItems.map((item) => item.quoteItem),
+  };
+}
+
 function getBearerToken(req: Request) {
   const authorization = req.headers.get("authorization") ?? "";
   const match = authorization.match(/^Bearer\s+(.+)$/i);
@@ -167,48 +255,14 @@ async function initializePayment(body: Record<string, unknown>, user: {
 
   const items = validateCartItems(body.items);
   const deliveryAddress = validateDeliveryAddress(body.delivery_address);
-  const productIds = [...new Set(items.map((item) => String(item.product_id)))];
-  const { data: products, error: productError } = await admin
-    .from("products")
-    .select("id, name, price")
-    .in("id", productIds);
-  if (productError) throw new Error("Could not load product prices. Please try again.");
-  if (!products || products.length !== productIds.length) {
-    throw new PaymentError("One or more products in your cart are no longer available.");
+  const pricedOrder = await priceCartItems(items, admin);
+  const expectedPrices = validateExpectedItems(body.expected_items, items);
+  if (pricedOrder.orderItems.some((item, index) =>
+    Math.round(item.price * 100) !== expectedPrices[index]
+  )) {
+    throw new PaymentError("Product prices changed. Review the updated total before paying.", 409);
   }
-
-  const productById = new Map(products.map((product) => [String(product.id), product]));
-  const calculatedItems = items.map((item) => {
-    const product = productById.get(String(item.product_id));
-    if (!product) {
-      throw new PaymentError("One or more products in your cart are no longer available.");
-    }
-
-    const price = Number(product.price);
-    const priceKobo = Math.round(price * 100);
-    if (!Number.isFinite(price) || price < 0 || !Number.isSafeInteger(priceKobo)) {
-      throw new Error("A product has an invalid price.");
-    }
-    const lineTotalKobo = priceKobo * item.quantity;
-    if (!Number.isSafeInteger(lineTotalKobo)) {
-      throw new PaymentError("The order total is too large.");
-    }
-    return {
-      lineTotalKobo,
-      orderItem: {
-        product_id: product.id,
-        name: product.name,
-        price: priceKobo / 100,
-        quantity: item.quantity,
-        customization_notes: item.customization_notes,
-      },
-    };
-  });
-  const totalKobo = calculatedItems.reduce((sum, item) => sum + item.lineTotalKobo, 0);
-  if (!Number.isSafeInteger(totalKobo) || totalKobo < 1 || totalKobo > 9_999_999_999) {
-    throw new PaymentError("The order total must be positive and within the supported limit.");
-  }
-  const orderItems = calculatedItems.map((item) => item.orderItem);
+  const { totalKobo, orderItems } = pricedOrder;
 
   const reference = crypto.randomUUID();
   const customerName = typeof user.user_metadata?.name === "string" && user.user_metadata.name.trim()
@@ -301,6 +355,16 @@ async function initializePayment(body: Record<string, unknown>, user: {
   }
 
   return { authorization_url: result.data.authorization_url, reference };
+}
+
+async function quotePayment(body: Record<string, unknown>, admin: ReturnType<typeof getAdminClient>) {
+  const items = validateCartItems(body.items);
+  const pricedOrder = await priceCartItems(items, admin);
+  return {
+    items: pricedOrder.quoteItems,
+    total_amount: pricedOrder.totalKobo / 100,
+    currency,
+  };
 }
 
 async function markOrderPaid(admin: ReturnType<typeof getAdminClient>, reference: string) {
@@ -472,6 +536,9 @@ Deno.serve(async (req) => {
     }
 
     const user = await getAuthenticatedUser(req, admin);
+    if (body.action === "quote") {
+      return jsonResponse(await quotePayment(body, admin));
+    }
     if (body.action === "initialize") {
       return jsonResponse(await initializePayment(body, user, admin));
     }

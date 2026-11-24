@@ -103,6 +103,7 @@
   gap: 12px;
   font-weight: 700;
   color: #fff;
+  text-decoration: none;
 }
 
 .brand-mark {
@@ -1878,6 +1879,17 @@
 .checkout-error {
   margin-top: 18px;
   color: var(--error-text);
+}
+
+.checkout-price-notice {
+  margin-top: 18px;
+  padding: 12px 14px;
+  border: 1px solid #facc15;
+  border-radius: 10px;
+  background: #fefce8;
+  color: #854d0e;
+  font-size: 0.9rem;
+  line-height: 1.45;
 }
 
 .checkout-payment-note {

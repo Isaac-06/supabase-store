@@ -5,8 +5,8 @@ import {
   isSupabaseConfigured,
   setRememberSession,
   supabase,
-} from '../supabase.js'
-import PasswordStrength from '../components/PasswordStrength.jsx'
+} from '../../shared/services/supabase.js'
+import PasswordStrength from './PasswordStrength.jsx'
 
 function Login({ onAuthenticated, isPasswordRecovery = false, onPasswordUpdated }) {
   const [email, setEmail] = useState('')

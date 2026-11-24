@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { formatCurrency } from '../utils/currency'
+import { formatCurrency } from '../../shared/utils/currency'
 
 export default function Cart({ items = [], removeFromCart, updateQuantity, onCheckout, onBack }) {
   const [itemToRemove, setItemToRemove] = useState(null)

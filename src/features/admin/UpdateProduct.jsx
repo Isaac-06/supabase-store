@@ -1,4 +1,4 @@
-import { supabase } from "../supabase";
+import { supabase } from "../../shared/services/supabase";
 
 function UpdateProduct() {
   async function updateProduct() {

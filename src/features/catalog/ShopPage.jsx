@@ -1,6 +1,6 @@
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import ProductCard from '../components/ProductCard'
-import { getProductCategory } from '../utils/products'
+import ProductCard from './ProductCard'
+import { getProductCategory } from './products'
 
 function ShopPage({ products = [], productsLoading, productsError, addToCart, onViewProduct }) {
   const navigate = useNavigate()
