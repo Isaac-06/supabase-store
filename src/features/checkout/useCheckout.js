@@ -237,7 +237,7 @@ export function useCheckout({ user, cartItems, cartReady, clearCart, setCurrentV
 
     const currentVerificationId = verificationId.current + 1
     verificationId.current = currentVerificationId
-    setCurrentView('payment')
+    setCurrentView('payment', { paymentVerification: true })
 
     let confirmedOrder = null
 

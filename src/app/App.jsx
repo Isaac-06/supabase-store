@@ -322,7 +322,7 @@ function App() {
           <Route
             path="/payment"
             element={requireUser(
-              paymentReference !== null
+              paymentReference !== null || location.state?.paymentVerification
                 ? <p className="product-status" role="status">Verifying your Paystack payment...</p>
                 : <Navigate to="/shop" replace />
             )}
