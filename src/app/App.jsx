@@ -33,10 +33,11 @@ const viewPaths = {
 function App() {
   const location = useLocation()
   const navigate = useNavigate()
-  const setCurrentView = useCallback((view) => {
+  const setCurrentView = useCallback((view, state) => {
     const path = viewPaths[view]
     if (!path) throw new Error(`Unknown app view: ${view}`)
-    navigate(path)
+    if (state === undefined) navigate(path)
+    else navigate(path, { state })
   }, [navigate])
   const { products, isLoading: productsLoading, error: productsError } = useProducts()
   const [selectedProduct, setSelectedProduct] = useState(null)
@@ -234,8 +235,9 @@ function App() {
     ? <Orders userId={user.id} />
     : <Navigate to="/account" replace />
 
-  const confirmationPage = completedOrder
-    ? <OrderConfirmation order={completedOrder} onContinueShopping={() => setCurrentView('shop')} />
+  const confirmationOrder = completedOrder ?? location.state?.completedOrder
+  const confirmationPage = confirmationOrder
+    ? <OrderConfirmation order={confirmationOrder} onContinueShopping={() => setCurrentView('shop')} />
     : <Navigate to="/shop" replace />
 
   return (

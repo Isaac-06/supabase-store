@@ -252,7 +252,7 @@ export function useCheckout({ user, cartItems, cartReady, clearCart, setCurrentV
         if (verificationId.current === currentVerificationId) {
           setCompletedOrder(data.order)
           clearCart()
-          setCurrentView('confirmation')
+          setCurrentView('confirmation', { completedOrder: data.order })
         }
       } catch (caughtError) {
         console.error('Could not verify Paystack payment:', caughtError)
