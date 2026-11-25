@@ -239,6 +239,8 @@ export function useCheckout({ user, cartItems, cartReady, clearCart, setCurrentV
     verificationId.current = currentVerificationId
     setCurrentView('payment')
 
+    let confirmedOrder = null
+
     async function verifyPayment() {
       try {
         if (!paymentReference) throw new Error('Paystack did not return a payment reference. Please try again.')
@@ -248,17 +250,19 @@ export function useCheckout({ user, cartItems, cartReady, clearCart, setCurrentV
         })
         if (invokeError) throw invokeError
         if (!data?.paid) throw new Error(data?.message || 'Payment could not be confirmed.')
+        if (!data.order || typeof data.order !== 'object') {
+          throw new Error('Payment was confirmed, but order details could not be loaded.')
+        }
 
         if (verificationId.current === currentVerificationId) {
-          setCompletedOrder(data.order)
+          confirmedOrder = data.order
+          setCompletedOrder(confirmedOrder)
           clearCart()
-          setCurrentView('confirmation', { completedOrder: data.order })
         }
       } catch (caughtError) {
         console.error('Could not verify Paystack payment:', caughtError)
         if (verificationId.current === currentVerificationId) {
           setError(caughtError.message || 'Could not verify payment. Please try again.')
-          setCurrentView('checkout')
         }
       } finally {
         if (verificationId.current === currentVerificationId) {
@@ -266,8 +270,16 @@ export function useCheckout({ user, cartItems, cartReady, clearCart, setCurrentV
           callbackUrl.searchParams.delete('payment')
           callbackUrl.searchParams.delete('reference')
           callbackUrl.searchParams.delete('trxref')
-          window.history.replaceState({}, '', callbackUrl)
+          window.history.replaceState(window.history.state, '', callbackUrl)
           setPaymentReference(null)
+        }
+      }
+
+      if (verificationId.current === currentVerificationId) {
+        if (confirmedOrder) {
+          setCurrentView('confirmation', { completedOrder: confirmedOrder })
+        } else {
+          setCurrentView('checkout')
         }
       }
     }
