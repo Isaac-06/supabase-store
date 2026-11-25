@@ -4,6 +4,10 @@ import { formatCurrency } from '../../shared/utils/currency'
 function Checkout({
   items = [],
   email,
+  phone = '',
+  deliveryProfile,
+  deliveryProfileError = '',
+  deliveryProfileReady,
   onBack,
   onPlaceOrder,
   isSubmitting,
@@ -19,6 +23,13 @@ function Checkout({
   const [pendingOrderDetails, setPendingOrderDetails] = useState(null)
   const [fieldErrors, setFieldErrors] = useState({})
   const paymentConfirmationDialogRef = useRef(null)
+  const phoneDigits = String(phone).replace(/\D/g, '')
+  const nationalPhone = phoneDigits.startsWith('234')
+    ? phoneDigits.slice(3)
+    : phoneDigits.startsWith('0')
+      ? phoneDigits.slice(1)
+      : phoneDigits
+
   useEffect(() => {
     const dialog = paymentConfirmationDialogRef.current
     if (!dialog) return
@@ -99,6 +110,14 @@ function Checkout({
           <p className="eyebrow">Checkout</p>
           <h1>Delivery details</h1>
           <p className="checkout-account">Signed in as <strong>{email}</strong></p>
+          {!deliveryProfileReady && (
+            <p className="product-status" role="status">Loading your saved delivery details...</p>
+          )}
+          {deliveryProfileError && (
+            <p className="checkout-error" role="alert">
+              Could not load saved delivery details: {deliveryProfileError}. You can enter them manually.
+            </p>
+          )}
 
           <div className="checkout-fields">
             <label>
@@ -110,8 +129,10 @@ function Checkout({
                   type="tel"
                   autoComplete="tel-national"
                   placeholder="8012345678"
+                  defaultValue={nationalPhone}
                   maxLength="40"
                   required
+                  disabled={!deliveryProfileReady}
                   aria-invalid={Boolean(fieldErrors.phone)}
                   aria-describedby={fieldErrors.phone ? 'checkout-phone-error' : undefined}
                   onChange={() => clearFieldError('phone')}
@@ -125,8 +146,10 @@ function Checkout({
                 name="addressLine1"
                 type="text"
                 autoComplete="address-line1"
+                defaultValue={deliveryProfile?.address_line_1 ?? ''}
                 maxLength="200"
                 required
+                disabled={!deliveryProfileReady}
                 aria-invalid={Boolean(fieldErrors.addressLine1)}
                 aria-describedby={fieldErrors.addressLine1 ? 'checkout-address-error' : undefined}
                 onChange={() => clearFieldError('addressLine1')}
@@ -135,7 +158,14 @@ function Checkout({
             </label>
             <label className="checkout-field-full">
               Apartment, suite, etc. (optional)
-              <input name="addressLine2" type="text" autoComplete="address-line2" maxLength="200" />
+              <input
+                name="addressLine2"
+                type="text"
+                autoComplete="address-line2"
+                defaultValue={deliveryProfile?.address_line_2 ?? ''}
+                maxLength="200"
+                disabled={!deliveryProfileReady}
+              />
             </label>
             <label>
               City
@@ -143,8 +173,10 @@ function Checkout({
                 name="city"
                 type="text"
                 autoComplete="address-level2"
+                defaultValue={deliveryProfile?.city ?? ''}
                 maxLength="100"
                 required
+                disabled={!deliveryProfileReady}
                 aria-invalid={Boolean(fieldErrors.city)}
                 aria-describedby={fieldErrors.city ? 'checkout-city-error' : undefined}
                 onChange={() => clearFieldError('city')}
@@ -157,8 +189,10 @@ function Checkout({
                 name="postalCode"
                 type="text"
                 autoComplete="postal-code"
+                defaultValue={deliveryProfile?.postal_code ?? ''}
                 maxLength="24"
                 required
+                disabled={!deliveryProfileReady}
                 aria-invalid={Boolean(fieldErrors.postalCode)}
                 aria-describedby={fieldErrors.postalCode ? 'checkout-postal-code-error' : undefined}
                 onChange={() => clearFieldError('postalCode')}
@@ -186,7 +220,7 @@ function Checkout({
           <button
             className="primary-btn checkout-submit"
             type="submit"
-            disabled={isSubmitting || isQuoting || !quoteReady || Boolean(quoteError) || items.length === 0}
+            disabled={!deliveryProfileReady || isSubmitting || isQuoting || !quoteReady || Boolean(quoteError) || items.length === 0}
           >
             {isSubmitting ? 'Connecting to Paystack...' : isQuoting ? 'Checking current prices...' : 'Pay with Paystack'}
           </button>

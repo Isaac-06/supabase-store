@@ -69,6 +69,9 @@ function App() {
     isSubmitting: isSubmittingOrder,
     error: checkoutError,
     completedOrder,
+    deliveryProfile,
+    deliveryProfileError,
+    deliveryProfileReady,
     quoteItems,
     quoteTotal,
     quoteError,
@@ -207,8 +210,13 @@ function App() {
 
   const checkoutPage = (
     <Checkout
+      key={deliveryProfileReady ? `profile-${user?.id}` : `loading-${user?.id}`}
       items={quoteItems}
       email={user?.email ?? ''}
+      phone={deliveryProfile?.phone ?? user?.user_metadata?.phone ?? ''}
+      deliveryProfile={deliveryProfile}
+      deliveryProfileError={deliveryProfileError}
+      deliveryProfileReady={deliveryProfileReady}
       onBack={() => setCurrentView('cart')}
       onPlaceOrder={placeOrder}
       isSubmitting={isSubmittingOrder}

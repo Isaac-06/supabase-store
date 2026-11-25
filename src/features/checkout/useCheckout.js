@@ -33,6 +33,8 @@ export function useCheckout({ user, cartItems, cartReady, clearCart, setCurrentV
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [completedOrder, setCompletedOrder] = useState(null)
+  const [deliveryProfileState, setDeliveryProfileState] = useState(null)
+  const [deliveryProfileErrorState, setDeliveryProfileErrorState] = useState(null)
   const [quoteState, setQuoteState] = useState({
     cartKey: null,
     status: 'idle',
@@ -48,6 +50,55 @@ export function useCheckout({ user, cartItems, cartReady, clearCart, setCurrentV
   })))
 
   const clearError = useCallback(() => setError(''), [])
+
+  useEffect(() => {
+    if (!enabled || !userId) return undefined
+
+    let isActive = true
+
+    async function loadDeliveryProfile() {
+      try {
+        const { data, error: profileError } = await supabase
+          .from('profiles')
+          .select('phone, address_line_1, address_line_2, city, postal_code, country')
+          .eq('user_id', userId)
+          .maybeSingle()
+
+        if (profileError) throw profileError
+        if (isActive) {
+          setDeliveryProfileState({ userId, data })
+          setDeliveryProfileErrorState(null)
+        }
+      } catch (caughtError) {
+        console.error('Could not load saved delivery details:', caughtError)
+        if (isActive) {
+          setDeliveryProfileErrorState({
+            userId,
+            message: caughtError instanceof Error
+              ? caughtError.message
+              : 'Could not load saved delivery details.',
+          })
+        }
+      }
+    }
+
+    void loadDeliveryProfile()
+
+    return () => {
+      isActive = false
+    }
+  }, [enabled, userId])
+
+  const deliveryProfile = enabled && userId && deliveryProfileState?.userId === userId
+    ? deliveryProfileState.data
+    : null
+  const deliveryProfileError = enabled && userId && deliveryProfileErrorState?.userId === userId
+    ? deliveryProfileErrorState.message
+    : ''
+  const deliveryProfileReady = Boolean(enabled && userId && (
+    deliveryProfileState?.userId === userId
+    || deliveryProfileErrorState?.userId === userId
+  ))
 
   const refreshQuote = useCallback(async () => {
     if (!userId || cartItems.length === 0) return
@@ -131,6 +182,23 @@ export function useCheckout({ user, cartItems, cartReady, clearCart, setCurrentV
     }
 
     try {
+      const { error: profileSaveError } = await supabase
+        .from('profiles')
+        .upsert({
+          user_id: userId,
+          phone: deliveryAddress.phone,
+          address_line_1: deliveryAddress.address_line_1,
+          address_line_2: deliveryAddress.address_line_2,
+          city: deliveryAddress.city,
+          postal_code: deliveryAddress.postal_code,
+          country: deliveryProfile?.country || 'Nigeria',
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' })
+
+      if (profileSaveError) {
+        throw new Error(`Could not save your delivery details: ${profileSaveError.message}`)
+      }
+
       const { data, error: invokeError } = await supabase.functions.invoke('paystack-payments', {
         body: {
           action: 'initialize',
@@ -152,7 +220,7 @@ export function useCheckout({ user, cartItems, cartReady, clearCart, setCurrentV
       if (!data?.authorization_url) throw new Error('Paystack did not return a payment link.')
       window.location.assign(data.authorization_url)
     } catch (caughtError) {
-      console.error('Could not start Paystack payment:', caughtError)
+      console.error('Could not prepare checkout or start Paystack payment:', caughtError)
       const { message, status } = await getFunctionErrorDetails(
         caughtError,
         'Could not start payment. Please try again.'
@@ -162,7 +230,7 @@ export function useCheckout({ user, cartItems, cartReady, clearCart, setCurrentV
     } finally {
       setIsSubmitting(false)
     }
-  }, [cartItems, currentQuote, isSubmitting, refreshQuote, userId])
+  }, [cartItems, currentQuote, deliveryProfile, isSubmitting, refreshQuote, userId])
 
   useEffect(() => {
     if (paymentReference === null || !userId) return undefined
@@ -212,6 +280,9 @@ export function useCheckout({ user, cartItems, cartReady, clearCart, setCurrentV
     isSubmitting,
     error,
     completedOrder,
+    deliveryProfile,
+    deliveryProfileError,
+    deliveryProfileReady,
     quoteItems,
     quoteTotal: currentQuote?.total_amount ?? 0,
     quoteError,
