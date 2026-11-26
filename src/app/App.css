@@ -211,7 +211,10 @@
   transition: color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
 }
 
-.account-button .material-symbols-outlined {
+.account-button svg {
+  display: block;
+  width: 22px;
+  height: 22px;
   font-size: 22px;
   line-height: 1;
 }
@@ -444,6 +447,46 @@
   font: inherit;
 }
 
+.auth-password-field {
+  position: relative;
+  margin-bottom: 8px;
+}
+
+.auth-password-field input {
+  margin-bottom: 0;
+  padding-right: 44px;
+}
+
+.auth-password-field input::-ms-reveal,
+.auth-password-field input::-ms-clear {
+  display: none;
+}
+
+.auth-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.auth-password-toggle svg {
+  width: 20px;
+  height: 20px;
+}
+
+.auth-password-toggle:hover,
+.auth-password-toggle:focus-visible {
+  color: var(--primary);
+}
+
 .auth-form input[aria-invalid='true'] {
   border-color: var(--error);
 }
@@ -531,9 +574,10 @@
   transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
-.cart-badge .material-symbols-outlined {
-  font-size: 22px;
-  line-height: 1;
+.cart-badge svg {
+  display: block;
+  width: 22px;
+  height: 22px;
 }
 
 .cart-badge__count {
@@ -1104,8 +1148,10 @@
   color: var(--primary);
 }
 
-.back-arrow-button .material-symbols-outlined {
-  font-size: 20px;
+.back-arrow-button svg {
+  display: block;
+  width: 20px;
+  height: 20px;
 }
 
 .checkout-page > .back-arrow-button {
@@ -3274,5 +3320,51 @@
 @media (prefers-reduced-motion: reduce) {
   .orders-page {
     animation: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .topbar {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .account-actions {
+    grid-column: 1;
+    grid-row: 2;
+    justify-content: space-between;
+  }
+
+  .welcome-user {
+    flex: 1 1 auto;
+    max-width: none;
+  }
+
+  .nav {
+    grid-column: 1;
+    grid-row: 3;
+    justify-content: flex-start;
+    gap: 4px 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(226, 232, 240, 0.18);
+  }
+
+  .categories-section,
+  .home-featured-section {
+    margin-top: 22px;
+    padding: 22px 16px;
+  }
+
+  .category-grid,
+  .product-grid {
+    gap: 16px;
+  }
+
+  .product-card {
+    padding: 16px;
+  }
+
+  .account-actions {
+    gap: 8px;
   }
 }

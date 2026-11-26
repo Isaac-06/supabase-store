@@ -9,6 +9,7 @@ import ProductDetails from '../features/catalog/ProductDetails'
 import HomePage from '../features/catalog/HomePage'
 import ShopPage from '../features/catalog/ShopPage'
 import Login from '../features/auth/Login'
+import ResetPassword from '../features/auth/ResetPassword'
 import SignUp from '../features/auth/SignUp'
 import { useAuth } from '../features/auth/useAuth'
 import useProducts from '../features/catalog/useProducts'
@@ -28,6 +29,7 @@ const viewPaths = {
   checkout: '/checkout',
   payment: '/payment',
   confirmation: '/confirmation',
+  resetPassword: '/reset-password',
 }
 
 function App() {
@@ -173,14 +175,26 @@ function App() {
       {authMode === 'login' || authMode === 'reset'
         ? <Login
             onAuthenticated={() => setCurrentView('home')}
-            isPasswordRecovery={authMode === 'reset'}
-            onPasswordUpdated={() => {
-              setAuthMode('login')
-              setCurrentView('home')
-            }}
           />
         : <SignUp onAuthenticated={() => setCurrentView('home')} />}
     </section>
+  )
+
+  const resetPasswordPage = (
+    isSupabaseConfigured && !authInitialized
+      ? <p className="product-status" role="status">Loading your account...</p>
+      : <ResetPassword
+          hasSession={Boolean(user)}
+          onBackToSignIn={() => {
+            setAuthMode('login')
+            setCurrentView('account')
+          }}
+          onPasswordUpdated={() => {
+            setAuthMode('login')
+            setCurrentView('account')
+            showToast('Your password has been updated.')
+          }}
+        />
   )
 
   const detailsPage = selectedProduct
@@ -287,7 +301,10 @@ function App() {
                   setIsLogoutDialogOpen(true)
                 }}
               >
-                <span className="material-symbols-outlined" aria-hidden="true">logout</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+                  <path d="M10 17l5-5-5-5M15 12H3" />
+                  <path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7" />
+                </svg>
               </button>
               <button
                 type="button"
@@ -296,7 +313,11 @@ function App() {
                 title="Cart"
                 onClick={() => setCurrentView('cart')}
               >
-                <span className="material-symbols-outlined" aria-hidden="true">shopping_cart</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+                  <path d="M3 4h2l2.2 11.2a2 2 0 0 0 2 1.6h8.7a2 2 0 0 0 2-1.6L22 8H6" />
+                  <circle cx="10" cy="20" r="1" />
+                  <circle cx="18" cy="20" r="1" />
+                </svg>
                 <span className="cart-badge__count">{totalItems}</span>
               </button>
             </>
@@ -316,6 +337,7 @@ function App() {
               ? <p className="product-status" role="status">Loading your account...</p>
               : user ? <Navigate to="/" replace /> : accountPage}
           />
+          <Route path="/reset-password" element={resetPasswordPage} />
           <Route path="/details" element={requireUser(detailsPage)} />
           <Route path="/cart" element={requireUser(cartPage)} />
           <Route path="/checkout" element={requireUser(checkoutPage)} />

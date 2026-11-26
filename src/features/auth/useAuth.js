@@ -40,7 +40,7 @@ export function useAuth(setCurrentView) {
         if (event === 'SIGNED_IN' && wasLoggedOut) setCurrentView('home')
         if (event === 'PASSWORD_RECOVERY') {
           setAuthMode('reset')
-          setCurrentView('account')
+          setCurrentView('resetPassword')
         }
         if (event === 'SIGNED_OUT') {
           setAuthMode('login')

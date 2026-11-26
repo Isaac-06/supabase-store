@@ -98,7 +98,15 @@ Checkout sends the customer to Paystack in NGN. Product prices are read from Sup
 
 For local testing, set `APP_ORIGIN` to the local Vite origin, deploy/serve the Edge Function with the required secrets, and use Paystack test credentials. After changing `APP_ORIGIN` or a key, update the Supabase Function secrets before testing again.
 
-Add product rows from **Table Editor > products**. Sign-up and sign-in use Supabase Auth; configure the allowed site URL and email confirmation settings under **Authentication** in the Supabase dashboard.
+Add product rows from **Table Editor > products**. Sign-up and sign-in use Supabase Auth. To require email verification before account access, enable **Confirm email** under **Authentication > Providers > Email**. To send a code rather than a confirmation link, edit **Authentication > Email Templates > Confirm signup** and replace `{{ .ConfirmationURL }}` with `{{ .Token }}`, for example:
+
+```html
+<h2>Confirm your signup</h2>
+<p>Enter this code in the app to confirm your email:</p>
+<p>{{ .Token }}</p>
+```
+
+The app verifies this code with Supabase Auth before granting access. Password reset uses a separate **Reset Password** email template and remains link-based; keep its `{{ .ConfirmationURL }}` link intact. Add the reset callback to **Authentication > URL Configuration > Redirect URLs** (for example, `http://localhost:5173/reset-password` locally and `https://your-app.example.com/reset-password` in production). The app shows the new-password form only when Supabase returns a valid recovery session.
 
 The current client is read-only for products. Add insert, update, or delete policies only when an admin workflow exists, and scope those policies to a trusted admin role rather than allowing every signed-in user to modify the catalog.
 

@@ -102,7 +102,9 @@ function Checkout({
   return (
     <section className="checkout-page">
       <button type="button" className="back-arrow-button" aria-label="Back to cart" title="Back to cart" onClick={onBack}>
-        <span className="material-symbols-outlined" aria-hidden="true">arrow_back_ios</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
       </button>
 
       <div className="checkout-layout">

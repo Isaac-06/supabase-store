@@ -6,12 +6,12 @@ import {
   setRememberSession,
   supabase,
 } from '../../shared/services/supabase.js'
-import PasswordStrength from './PasswordStrength.jsx'
+import PasswordVisibilityToggle from './PasswordVisibilityToggle.jsx'
 
-function Login({ onAuthenticated, isPasswordRecovery = false, onPasswordUpdated }) {
+function Login({ onAuthenticated }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
   const [isResetRequest, setIsResetRequest] = useState(false)
   const [message, setMessage] = useState('')
@@ -21,6 +21,7 @@ function Login({ onAuthenticated, isPasswordRecovery = false, onPasswordUpdated 
   async function handleSubmit(event) {
     event.preventDefault()
     setMessage('')
+    setFieldErrors({})
     if (!isSupabaseConfigured) {
       setMessage(getSupabaseConfigError())
       return
@@ -64,60 +65,34 @@ function Login({ onAuthenticated, isPasswordRecovery = false, onPasswordUpdated 
       setMessage(getSupabaseConfigError())
       return
     }
+
+    const trimmedEmail = email.trim()
+    const errors = {}
+    if (!trimmedEmail) {
+      errors.email = 'Enter your email address.'
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      errors.email = 'Enter a valid email address, such as name@example.com.'
+    }
+
+    setFieldErrors(errors)
+    if (Object.keys(errors).length > 0) return
+
     setIsSubmitting(true)
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: getAuthRedirectUrl(),
-    })
-    setIsSubmitting(false)
-    setMessage(error ? error.message : 'Check your email for a password reset link.')
-  }
+    try {
+      const redirectTo = new URL('/reset-password', getAuthRedirectUrl()).toString()
+      const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
+        redirectTo,
+      })
 
-  async function handlePasswordUpdate(event) {
-    event.preventDefault()
-    setMessage('')
-    if (!isSupabaseConfigured) {
-      setMessage(getSupabaseConfigError())
-      return
+      setMessage(error
+        ? error.message
+        : 'If an account exists for this email, a reset link has been sent. Check your inbox and spam folder.')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not send a password reset link. Please try again.')
+    } finally {
+      setIsSubmitting(false)
     }
-
-    if (password.length < 6) {
-      setMessage('Your password must be at least 6 characters.')
-      return
-    }
-    if (password !== confirmPassword) {
-      setMessage('Passwords do not match.')
-      return
-    }
-
-    setIsSubmitting(true)
-    const { error } = await supabase.auth.updateUser({ password })
-    setIsSubmitting(false)
-
-    if (error) {
-      setMessage(error.message)
-    } else {
-      setMessage('Your password has been updated.')
-      onPasswordUpdated()
-    }
-  }
-
-  if (isPasswordRecovery) {
-    return (
-      <section className="auth-panel">
-        <p className="eyebrow">Account recovery</p>
-        <h1>Choose a new password</h1>
-        <form className="auth-form" onSubmit={handlePasswordUpdate}>
-          <label htmlFor="new-password">New password</label>
-          <input id="new-password" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={6} required aria-describedby="new-password-guidance" />
-          <PasswordStrength password={password} id="new-password" />
-          <label htmlFor="confirm-password">Confirm password</label>
-          <input id="confirm-password" type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} minLength={6} required />
-          <button className="primary-btn" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Updating...' : 'Update password'}</button>
-        </form>
-        {message && <p className="auth-message" role="alert">{message}</p>}
-      </section>
-    )
   }
 
   if (isResetRequest) {
@@ -125,13 +100,14 @@ function Login({ onAuthenticated, isPasswordRecovery = false, onPasswordUpdated 
       <section className="auth-panel">
         <p className="eyebrow">Account recovery</p>
         <h1>Reset your password</h1>
-        <form className="auth-form" onSubmit={handleResetRequest}>
+        <form className="auth-form" onSubmit={handleResetRequest} noValidate>
           <label htmlFor="reset-email">Email</label>
-          <input id="reset-email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+          <input id="reset-email" type="email" autoComplete="email" value={email} onChange={(event) => { setEmail(event.target.value); setFieldErrors((current) => ({ ...current, email: '' })); setMessage('') }} required aria-invalid={Boolean(fieldErrors.email)} aria-describedby={fieldErrors.email ? 'reset-email-error' : undefined} />
+          {fieldErrors.email && <span className="auth-field-error" id="reset-email-error">{fieldErrors.email}</span>}
           <button className="primary-btn" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Sending...' : 'Send reset link'}</button>
         </form>
-        <button className="text-btn" type="button" onClick={() => { setIsResetRequest(false); setMessage('') }}>Back to sign in</button>
-        {message && <p className="auth-message" role={message.startsWith('Check your email') ? 'status' : 'alert'}>{message}</p>}
+        <button className="text-btn" type="button" onClick={() => { setIsResetRequest(false); setMessage(''); setFieldErrors({}) }}>Back to sign in</button>
+        {message && <p className="auth-message" role={message.startsWith('If an account exists') ? 'status' : 'alert'}>{message}</p>}
       </section>
     )
   }
@@ -145,14 +121,22 @@ function Login({ onAuthenticated, isPasswordRecovery = false, onPasswordUpdated 
         <input id="login-email" type="email" autoComplete="email" value={email} onChange={(event) => { setEmail(event.target.value); setFieldErrors((current) => ({ ...current, email: '' })); setMessage('') }} required aria-invalid={Boolean(fieldErrors.email)} aria-describedby={fieldErrors.email ? 'login-email-error' : undefined} />
         {fieldErrors.email && <span className="auth-field-error" id="login-email-error">{fieldErrors.email}</span>}
         <label htmlFor="login-password">Password</label>
-        <input id="login-password" type="password" autoComplete="current-password" value={password} onChange={(event) => { setPassword(event.target.value); setFieldErrors((current) => ({ ...current, password: '' })); setMessage('') }} required aria-invalid={Boolean(fieldErrors.password)} aria-describedby={fieldErrors.password ? 'login-password-error' : undefined} />
+        <div className="auth-password-field">
+          <input id="login-password" type={isPasswordVisible ? 'text' : 'password'} autoComplete="current-password" value={password} onChange={(event) => { setPassword(event.target.value); setFieldErrors((current) => ({ ...current, password: '' })); setMessage('') }} required aria-invalid={Boolean(fieldErrors.password)} aria-describedby={fieldErrors.password ? 'login-password-error' : undefined} />
+          <PasswordVisibilityToggle
+            isVisible={isPasswordVisible}
+            onToggle={() => setIsPasswordVisible((visible) => !visible)}
+            hiddenLabel="Show password"
+            visibleLabel="Hide password"
+          />
+        </div>
         {fieldErrors.password && <span className="auth-field-error" id="login-password-error">{fieldErrors.password}</span>}
         <div className="login-options">
           <label className="remember-option" htmlFor="remember-me">
             <input id="remember-me" type="checkbox" checked={rememberMe} onChange={(event) => setRememberMe(event.target.checked)} />
             Remember me
           </label>
-          <button className="text-btn" type="button" onClick={() => { setIsResetRequest(true); setMessage('') }}>Forgot password?</button>
+          <button className="text-btn" type="button" onClick={() => { setIsResetRequest(true); setMessage(''); setFieldErrors({}) }}>Forgot password?</button>
         </div>
         <button className="primary-btn" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Signing in...' : 'Sign in'}</button>
       </form>
